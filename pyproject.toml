@@ -1,0 +1,64 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pyproject-pip"
+dynamic = ["version"]
+description = 'Install and manage pyproject.toml with pip commands.'
+readme = "README.md"
+requires-python = ">=3.8"
+license = "apache-2.0"
+keywords = []
+authors = [
+  { name = "Sebastian Peralta", email = "sebastian@mbodi.ai" },
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Programming Language :: Python :: Implementation :: PyPy",
+]
+dependencies = []
+
+[project.urls]
+Documentation = "https://github.com/Sebastian Peralta/pypip#readme"
+Issues = "https://github.com/Sebastian Peralta/pypip/issues"
+Source = "https://github.com/Sebastian Peralta/pypip"
+
+[project.scripts]
+pypip = "pyproject_pip.pypi:cli"
+
+[tool.hatch.version]
+path = "src/pyproject_pip/__about__.py"
+
+[tool.hatch.envs.types]
+extra-dependencies = [
+  "mypy>=1.0.0",
+]
+[tool.hatch.envs.types.scripts]
+check = "mypy --install-types --non-interactive {args:src/pyproject_pip tests}"
+
+[tool.coverage.run]
+source_pkgs = ["pyproject_pip", "tests"]
+branch = true
+parallel = true
+omit = [
+  "src/pyproject_pip/__about__.py",
+]
+
+[tool.coverage.paths]
+pypip = ["src/pyproject_pip", "*/pyproject_pip/src/pyproject_pip"]
+tests = ["tests", "*/pyproject_pip/tests"]
+
+[tool.coverage.report]
+exclude_lines = [
+  "no cov",
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+]
