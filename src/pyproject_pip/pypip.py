@@ -196,10 +196,8 @@ def modify_pyproject_toml(
 
     # Update the pyproject.toml with modified dependencies
     if is_hatch_env:
-        print('updating hatch')
         pyproject["tool"]["hatch"]["envs"][hatch_env]["dependencies"] = dependencies
     else:
-        print('Updating deps')
         pyproject.setdefault("project", {})["dependencies"] = dependencies
     pyproject.setdefault("project", {})["optional-dependencies"] = optional_dependencies
 
