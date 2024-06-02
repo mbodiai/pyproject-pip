@@ -32,10 +32,17 @@ Issues = "https://github.com/Sebastian Peralta/pypip/issues"
 Source = "https://github.com/Sebastian Peralta/pypip"
 
 [project.scripts]
-pypip = "pyproject_pip.pypi:cli"
+pypip = "pyproject_pip.pypip:cli"
 
+[project.optional-dependencies]
+all = ["click", "tomlkit", "requests"]
 [tool.hatch.version]
 path = "src/pyproject_pip/__about__.py"
+
+[tool.hatch.envs.default]
+python = "3.11"
+path = ".pypip/envs/pypip"
+dependencies = ["click", "tomlkit", "requests"]
 
 [tool.hatch.envs.types]
 extra-dependencies = [

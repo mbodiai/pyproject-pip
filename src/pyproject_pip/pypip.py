@@ -1,6 +1,5 @@
 """Synchronizes requirements and hatch pyproject."""
 
-import inspect
 import logging
 import os
 import subprocess
@@ -174,11 +173,11 @@ def modify_pyproject_toml(
 
     # Prepare the package string with version if provided
     package_version_str = f"{package_name}{('==' + package_version) if package_version else ''}"
-
+    
     if not is_optional:
         # Modify standard dependencies based on action
         dependencies = (
-            pyproject["tool"]["hatch"]["envs"][hatch_env]["dependencies"]
+            pyproject["tool"]["hatch"]["envs"][hatch_env].get("dependencies", [])
             if "tool" in pyproject and "hatch" in pyproject["tool"]
             else pyproject.get("project", {}).get(dependency_group, [])
         )
@@ -379,61 +378,3 @@ def show_command(hatch_env) -> None:
 
 
 
-
-def get_module_functions_as_string(module, depth=1, current_depth=0, include_imports=False, include_code=False):
-    """Get a string representation of all functions and methods in a module, optionally including submodules.
-
-    Args:
-        module (module): The module to inspect.
-        depth (int, optional): The depth of nested submodules and classes to inspect. Defaults to 1.
-        current_depth (int, optional): Current depth of inspection. Defaults to 0.
-        include_imports (bool, optional): Whether to include functions from imported submodules. Defaults to False.
-        include_code (bool, optional): Whether to include source code of functions. Defaults to False.
-
-    Returns:
-        str: String representation of all functions and methods in the module.
-    """
-    def inner(module, depth, current_depth, include_imports, include_code):
-        if current_depth > depth:
-            return ""
-
-        result = []
-        if current_depth == 0:
-            result.append(f"Module: {module.__name__}")
-            result.append(f"Docstring: {module.__doc__}\n" + "-" * 40)
-
-        for name, obj in inspect.getmembers(module):
-            if name.startswith('__'):
-                # Skip special or built-in attributes
-                continue
-            if inspect.isfunction(obj) and (include_imports or obj.__module__ == module.__name__):
-                result.append(f"{'  ' * current_depth}Function: {name}")
-                result.append(f"{'  ' * current_depth}Signature: {inspect.signature(obj)}")
-                result.append(f"{'  ' * current_depth}Docstring: {inspect.getdoc(obj)}")
-                if include_code:
-                    try:
-                        source_code = inspect.getsource(obj)
-                        result.append(f"{'  ' * (current_depth + 1)}Code:\n{source_code}")
-                    except OSError:
-                        result.append(f"{'  ' * current_depth}Source code not available.")
-                result.append("-" * 40)
-            elif inspect.isclass(obj) and (include_imports or obj.__module__ == module.__name__):
-                result.append(f"{'  ' * current_depth}Class: {name}")
-                result.append("-" * 40)
-                # Recursively get functions and methods of the class
-                result.append(inner(obj, depth, current_depth + 1, include_imports, include_code))
-            elif inspect.ismodule(obj) and include_imports:
-                result.append(f"{'  ' * current_depth}Submodule: {name}")
-                result.append("-" * 40)
-                try:
-                    result.append(inner(obj, depth, current_depth + 1, include_imports, include_code))
-                except ImportError:
-                    result.append(f"{'  ' * current_depth}Could not import submodule: {name}")
-        
-        return "\n".join(result)
-
-    return inner(module, depth, current_depth, include_imports, include_code)
-
-if __name__ == "__main__":
-    import mbodied.scripts.pypip
-    print(get_module_functions_as_string(mbodied.scripts.pypip))
