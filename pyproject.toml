@@ -24,7 +24,11 @@ classifiers = [
   "Programming Language :: Python :: Implementation :: CPython",
   "Programming Language :: Python :: Implementation :: PyPy",
 ]
-dependencies = []
+dependencies = [
+    "tomlkit",
+    "click",
+    "requests"
+]
 
 [project.urls]
 Documentation = "https://github.com/Sebastian Peralta/pypip#readme"

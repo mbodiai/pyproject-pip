@@ -173,13 +173,12 @@ def modify_pyproject_toml(
 
     # Prepare the package string with version if provided
     package_version_str = f"{package_name}{('==' + package_version) if package_version else ''}"
-    
+    is_hatch_env =  hatch_env and  "tool" in pyproject and "hatch" in pyproject["tool"]
     if not is_optional:
         # Modify standard dependencies based on action
         dependencies = (
             pyproject["tool"]["hatch"]["envs"][hatch_env].get("dependencies", [])
-            if "tool" in pyproject and "hatch" in pyproject["tool"]
-            else pyproject.get("project", {}).get(dependency_group, [])
+            if is_hatch_env else pyproject.setdefault("project", {}).get("dependencies", [])
         )
         dependencies = modify_dependencies(dependencies, package_version_str, action)
         optional_dependencies = pyproject.get("project", {}).get("optional-dependencies", {})
@@ -196,9 +195,11 @@ def modify_pyproject_toml(
         )
 
     # Update the pyproject.toml with modified dependencies
-    if "tool" in pyproject and "hatch" in pyproject["tool"]:
+    if is_hatch_env:
+        print('updating hatch')
         pyproject["tool"]["hatch"]["envs"][hatch_env]["dependencies"] = dependencies
     else:
+        print('Updating deps')
         pyproject.setdefault("project", {})["dependencies"] = dependencies
     pyproject.setdefault("project", {})["optional-dependencies"] = optional_dependencies
 
