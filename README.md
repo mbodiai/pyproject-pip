@@ -5,6 +5,13 @@
 
 -----
 
+Install and manage pyproject.toml with pip commands.
+
+See usage:
+
+```
+pypip --help
+```
 
 
 ## Table of Contents
