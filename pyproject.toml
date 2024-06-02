@@ -31,9 +31,9 @@ dependencies = [
 ]
 
 [project.urls]
-Documentation = "https://github.com/Sebastian Peralta/pypip#readme"
-Issues = "https://github.com/Sebastian Peralta/pypip/issues"
-Source = "https://github.com/Sebastian Peralta/pypip"
+Documentation = "https://github.com/mbodiai/pyproject-pip#readme"
+Issues = "https://github.com/mbodiai/pyproject-pip/issues"
+Source = "https://github.com/mbodiai/pyproject-pip"
 
 [project.scripts]
 pypip = "pyproject_pip.pypip:cli"
