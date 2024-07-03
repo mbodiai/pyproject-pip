@@ -5,7 +5,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-
+import tomlkit
 import click
 import requests
 import tomlkit
@@ -79,29 +79,83 @@ def modify_requirements(package_name, package_version=None, action="install") ->
         f.writelines(lines)
 
 
-def read_pyproject_toml(filepath="pyproject.toml"):
-    """Reads the pyproject.toml file and parses its content.
+
+def write_pyproject(data):
+    with open("pyproject.toml", "w") as f:
+        toml_str = tomlkit.dumps(data)
+        inside_dependencies = False
+        inside_optional_dependencies = False
+        # Ensure items in optional and project dependencies are on separate lines
+        input_lines = toml_str.splitlines()
+        output_lines = []
+        for line in input_lines:
+            # print(f"line: {line}, inside_dependencies: {inside_dependencies}, inside_optional_dependencies: {inside_optional_dependencies}")
+            line = line.rstrip()
+            if "." in line or (("[" in line and "]" in line) and "," not in line):
+                inside_dependencies = False
+                inside_optional_dependencies = False
+            if "optional-dependencies" in line:
+                inside_optional_dependencies = True
+                inside_dependencies = False
+            if inside_optional_dependencies and not inside_dependencies:
+                if "[" in line  and "." not in line and "[]" not in line:
+                    if line.lstrip().startswith("["):
+                        output_lines.append("[")
+                        line = line.replace("[", "")
+                if "]" in line:
+                    if not ("[" in line and "," in line):
+                        output_lines.append(line)
+                        continue
+                deps = line.split(",")
+                for dep in deps:
+                    new_dep = dep + "," if dep != deps[-1] else dep
+                    if dep.endswith("]") and "\n]" not in dep:
+                        new_dep = new_dep.replace("]", "\n]")
+                    if new_dep.strip():
+                        output_lines.append(new_dep)
+            if "dependencies" in line and not inside_optional_dependencies:
+                inside_dependencies = True
+                inside_optional_dependencies = False
+            if inside_dependencies and not inside_optional_dependencies:
+                inside_optional_dependencies = False
+                if "[" in line  and "." not in line and "[]" not in line:
+                    if line.lstrip().startswith("["):
+                        output_lines.append("[")
+                        line = line.replace("[", "")
+                if "]" in line:
+                    inside_dependencies = False
+                    if not ("[" in line and "," in line):
+                        output_lines.append(line)
+                        continue
+                deps = line.split(",")
+                for dep in deps:
+                    new_dep = dep + "," if dep != deps[-1] else dep
+                    if dep.endswith("]") and "\n]" not in dep:
+                        new_dep = new_dep.replace("]", "\n]")
+                    if new_dep.strip():
+                        output_lines.append(new_dep)
+            elif not inside_dependencies and not inside_optional_dependencies:
+                output_lines.append(line)
+        new_line = False
+        for line in output_lines:
+            if not line.strip() and new_line:
+                continue
+            elif not line.strip():
+                new_line = True
+            else:
+                new_line = False
+            f.write(line + "\n")
+
+def base_name(package_name):
+    """Extract the base package name from a package name with optional extras.
 
     Args:
-        filepath (str, optional): The path to the pyproject.toml file. Defaults to "pyproject.toml".
+        package_name (str): The package name with optional extras.
 
     Returns:
-        dict: The parsed content of the pyproject.toml file.
+        str: The base package name without extras.
     """
-    with open(filepath) as f:
-        return tomlkit.parse(f.read())
-
-
-def write_pyproject_toml(pyproject, filepath="pyproject.toml") -> None:
-    """Writes the modified content back to the pyproject.toml file.
-
-    Args:
-        pyproject (dict): The modified pyproject content.
-        filepath (str, optional): The path to the pyproject.toml file. Defaults to "pyproject.toml".
-    """
-    with open(filepath, "w") as f:
-        f.write(tomlkit.dumps(pyproject))
-
+    return package_name.split("[")[0].split("==")[0]
 
 def modify_dependencies(dependencies, package_version_str, action):
     """Modify the dependencies list for installing or uninstalling a package.
@@ -114,49 +168,16 @@ def modify_dependencies(dependencies, package_version_str, action):
     Returns:
         list: Modified list of dependencies.
     """
-    if action == "install" and package_version_str not in dependencies:
-        dependencies.append(package_version_str)
-    elif action == "uninstall" and package_version_str in dependencies:
-        dependencies.remove(package_version_str)
-    return dependencies
-
-
-def modify_optional_dependencies(optional_dependencies: dict, package_version_str, action, dependency_group):
-    """Modify the optional dependencies for installing or uninstalling a package.
-
-    Args:
-        optional_dependencies (dict): Dictionary of optional dependencies groups.
-        package_version_str (str): Package with version string.
-        action (str): Action to perform, either 'install' or 'uninstall'.
-        dependency_group (str): The group of optional dependencies to modify.
-
-    Returns:
-        dict: Modified dictionary of optional dependencies.
-    """
-    group_dependencies = optional_dependencies.get(dependency_group, [])
-    all_group = optional_dependencies.setdefault("all", [])
-
+    dependencies = [dep.strip() for dep in dependencies if base_name(dep) != base_name(package_version_str)]
     if action == "install":
-        if package_version_str not in group_dependencies:
-            group_dependencies.append(package_version_str)
-        if package_version_str not in all_group:
-            all_group.append(package_version_str)
-    elif action == "uninstall":
-        if package_version_str in group_dependencies:
-            group_dependencies.remove(package_version_str)
-        if package_version_str in all_group:
-            all_group.remove(package_version_str)
-
-    optional_dependencies[dependency_group] = group_dependencies
-    optional_dependencies["all"] = all_group
-    return optional_dependencies
-
+        dependencies.append(package_version_str.strip())
+    return dependencies
 
 def modify_pyproject_toml(
     package_name,
     package_version="",
     action="install",
-    hatch_env="default",
+    hatch_env=None,
     dependency_group="dependencies",
 ) -> None:
     """Modify the pyproject.toml file to update dependencies based on action.
@@ -168,45 +189,41 @@ def modify_pyproject_toml(
         hatch_env (str, optional): The Hatch environment to use. Defaults to "default".
         dependency_group (str, optional): The group of dependencies to modify. Defaults to "dependencies".
     """
+    with open("pyproject.toml") as f:
+        content = f.read()
+        pyproject = tomlkit.parse(content)
+
     is_optional = dependency_group != "dependencies"
-    pyproject = read_pyproject_toml()
+    is_hatch_env = hatch_env and "tool" in pyproject and "hatch" in pyproject["tool"]
+    if hatch_env and not is_hatch_env:
+        raise ValueError("Hatch environment specified but hatch tool not found in pyproject.toml.")
 
     # Prepare the package string with version if provided
     package_version_str = f"{package_name}{('==' + package_version) if package_version else ''}"
-    is_hatch_env =  hatch_env and  "tool" in pyproject and "hatch" in pyproject["tool"]
-    if not is_optional:
-        # Modify standard dependencies based on action
-        dependencies = (
-            pyproject["tool"]["hatch"]["envs"][hatch_env].get("dependencies", [])
-            if is_hatch_env else pyproject.setdefault("project", {}).get("dependencies", [])
-        )
-        dependencies = modify_dependencies(dependencies, package_version_str, action)
-        optional_dependencies = pyproject.get("project", {}).get("optional-dependencies", {})
-        optional_dependencies = modify_optional_dependencies(optional_dependencies, package_version_str, action, "all")
-    else:
-        dependencies = []
-        # Modify optional dependencies based on action
-        optional_dependencies = pyproject.get("project", {}).get("optional-dependencies", {})
-        optional_dependencies = modify_optional_dependencies(
-            optional_dependencies,
-            package_version_str,
-            action,
-            dependency_group,
-        )
+    print(f"package_version_str: {package_version_str}")
+    base_project =  pyproject["tool"]["hatch"]["envs"][hatch_env] if is_hatch_env else pyproject.get("project", {})
+    optional_base = pyproject["tool"]["hatch"]["envs"][hatch_env].get("optional-dependencies", {}) if is_hatch_env else pyproject["project"]["optional-dependencies"]
+    
+    if is_optional:
+        dependencies = optional_base.get(dependency_group, [])
+        optional_base[dependency_group] = modify_dependencies(dependencies, package_version_str, action)
 
-    # Update the pyproject.toml with modified dependencies
+        all_group = optional_base.get("all", [])
+        optional_base["all"] = modify_dependencies(all_group, package_version_str, action)
+    else:
+        dependencies = base_project.get("dependencies", [])
+        base_project["dependencies"] = modify_dependencies(dependencies, package_version_str, action)
     if is_hatch_env:
-        pyproject["tool"]["hatch"]["envs"][hatch_env]["dependencies"] = dependencies
+        pyproject["tool"]["hatch"]["envs"][hatch_env] = base_project
     else:
-        pyproject.setdefault("project", {})["dependencies"] = dependencies
-    pyproject.setdefault("project", {})["optional-dependencies"] = optional_dependencies
+        pyproject["project"] = base_project
 
-    write_pyproject_toml(pyproject)
+    write_pyproject(pyproject)
 
 
 @click.group(invoke_without_command=True)
 @click.pass_context
-@click.option("--hatch-env", default="default", help="Specify the Hatch environment to use")
+@click.option("--hatch-env", default=None, help="Specify the Hatch environment to use")
 def cli(ctx, hatch_env) -> None:
     """Main CLI entry point. If no subcommand is provided, it shows the dependencies.
 
@@ -235,7 +252,7 @@ def get_pip_freeze():
 )
 @click.option("-U", "--upgrade", is_flag=True, help="Upgrade the package(s)")
 @click.option("-e", "--editable", is_flag=True, help="Install a package in editable mode")
-@click.option("--hatch-env", default="default", help="Specify the Hatch environment to use")
+@click.option("--hatch-env", default=None ,help="Specify the Hatch environment to use")
 @click.option("-g", "--dependency-group", default="dependencies", help="Specify the dependency group to use")
 def install_command(packages, requirements, upgrade, editable, hatch_env, dependency_group) -> None:
     """Install packages and update requirements.txt and pyproject.toml accordingly.
@@ -253,7 +270,8 @@ def install_command(packages, requirements, upgrade, editable, hatch_env, depend
             with open(requirements) as f:
                 packages = [line.strip() for line in f if line.strip() and not line.startswith("#")]
 
-        initial_packages = get_pip_freeze()
+        initial_packages = get_requirements_packages()
+
 
         for package in packages:
             package_install_cmd = [sys.executable, "-m", "pip", "install"]
@@ -263,17 +281,22 @@ def install_command(packages, requirements, upgrade, editable, hatch_env, depend
                 package_install_cmd.append("-U")
             package_install_cmd.append(package)
             subprocess.check_call(package_install_cmd)
+            modify_requirements(package, action="install")
 
             # Determine the newly installed package by comparing pip freeze output
-            final_packages = get_pip_freeze()
+            final_packages = get_requirements_packages()
             new_packages = final_packages - initial_packages
             if new_packages:
                 for new_package in new_packages:
-                    package_name = new_package.split("==")[0]
-                    modify_requirements(package_name, action="install")
-                    modify_pyproject_toml(package_name, action="install", hatch_env=hatch_env, dependency_group=dependency_group)
+                    package_name, package_version = new_package.split("==")
+                    print(f"package_name latest: {package_name}, package_version: {package_version}")
+                    modify_requirements(package_name, package_version, action="install")
+                    modify_pyproject_toml(package_name, package_version, action="install", hatch_env=hatch_env, dependency_group=dependency_group)
             else:
-                modify_pyproject_toml(package, action="install", hatch_env=hatch_env, dependency_group=dependency_group)
+                package_version = get_latest_version(package)
+                print(f"package_name latest second: {package}")
+                modify_pyproject_toml(package,package_version, action="install", hatch_env=hatch_env, dependency_group=dependency_group)
+
     except subprocess.CalledProcessError as e:
         click.echo(f"Error: Failed to install {package}.", err=True)
         click.echo(f"Reason: {e}", err=True)
@@ -289,14 +312,22 @@ def is_package_in_requirements(package_name) -> bool:
     Returns:
         bool: True if the package is listed in requirements.txt, False otherwise.
     """
-    if not os.path.exists("requirements.txt"):
-        return False
+    if not Path("requirements.txt").exists():
+        raise FileNotFoundError("requirements.txt file not found.")
     with open("requirements.txt") as f:
-        lines = f.readlines()
-    return any(line.strip().startswith(package_name) for line in lines)
+        return any(base_name(package_name) == base_name(line) for line in f)
+
+def get_requirements_packages():
+    """Get the list of packages from the requirements.txt file.
+
+    Returns:
+        set: Set of packages listed in the requirements.txt file.
+    """
+    with open("requirements.txt") as f:
+        return set(line.strip() for line in f if line.strip() and not line.strip().startswith("#"))
 
 
-def is_package_in_pyproject(package_name, hatch_env="default") -> bool:
+def is_package_in_pyproject(package_name, hatch_env=None) -> bool:
     """Check if a package is listed in the pyproject.toml file for a given Hatch environment.
 
     Args:
@@ -307,18 +338,25 @@ def is_package_in_pyproject(package_name, hatch_env="default") -> bool:
         bool: True if the package is listed in pyproject.toml, False otherwise.
     """
     if not Path("pyproject.toml").exists():
-        return False
+        raise FileNotFoundError("pyproject.toml file not found.")
     with open("pyproject.toml") as f:
         content = f.read()
         pyproject = tomlkit.parse(content)
-    dependencies = pyproject.get("tool", {}).get("hatch", {}).get("envs", {}).get(hatch_env, {}).get("dependencies", [])
+    is_hatch_env = hatch_env and "tool" in pyproject and "hatch" in pyproject["tool"]
+    if hatch_env and not is_hatch_env:
+        raise ValueError("Hatch environment specified but hatch tool not found in pyproject.toml.")
+    if is_hatch_env:
+        dependencies = pyproject["tool"]["hatch"]["envs"][hatch_env]["dependencies"]
+    else:
+        dependencies = pyproject.get("dependencies", [])
     return any(package_name in dep for dep in dependencies)
 
 
 @cli.command("uninstall")
 @click.argument("packages", nargs=-1)
-@click.option("--hatch-env", default="default", help="Specify the Hatch environment to use")
-def uninstall_command(packages, hatch_env) -> None:
+@click.option("--hatch-env", default=None, help="Specify the Hatch environment to use")
+@click.option("-g", "--dependency-group", default="dependencies", help="Specify the dependency group to use")
+def uninstall_command(packages, hatch_env, dependency_group) -> None:
     """Uninstall packages and update requirements.txt and pyproject.toml accordingly.
 
     Args:
@@ -330,14 +368,14 @@ def uninstall_command(packages, hatch_env) -> None:
         in_requirements = is_package_in_requirements(package_name)
         in_pyproject = is_package_in_pyproject(package_name, hatch_env)
 
-        if not in_requirements and not in_pyproject:
-            click.echo(f"Package '{package_name}' is not listed in requirements.txt or pyproject.toml, skipping.")
-            continue
+        # if not in_requirements and not in_pyproject:
+        #     click.echo(f"Package '{package_name}' is not listed in requirements.txt or pyproject.toml, skipping.")
+        #     continue
 
         try:
             subprocess.check_call([sys.executable, "-m", "pip", "uninstall", package_name, "-y"])
             modify_requirements(package_name, action="uninstall")
-            modify_pyproject_toml(package_name, action="uninstall", hatch_env=hatch_env)
+            modify_pyproject_toml(package_name, action="uninstall", hatch_env=hatch_env, dependency_group=dependency_group)
             click.echo(f"Successfully uninstalled {package_name}")
         except subprocess.CalledProcessError as e:
             click.echo(f"Error: Failed to uninstall {package_name}.", err=True)
@@ -377,3 +415,5 @@ def show_command(hatch_env) -> None:
 
 
 
+if __name__ == "__main__":
+    cli()

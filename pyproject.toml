@@ -24,10 +24,11 @@ classifiers = [
   "Programming Language :: Python :: Implementation :: CPython",
   "Programming Language :: Python :: Implementation :: PyPy",
 ]
-dependencies = [
-    "tomlkit",
-    "click",
-    "requests"
+dependencies = ["tomlkit",
+ "click",
+ "toml",
+ "requests",
+  "packaging",
 ]
 
 [project.urls]
@@ -38,15 +39,14 @@ Source = "https://github.com/mbodiai/pyproject-pip"
 [project.scripts]
 pypip = "pyproject_pip.pypip:cli"
 
-[project.optional-dependencies]
-all = ["click", "tomlkit", "requests"]
+
 [tool.hatch.version]
 path = "src/pyproject_pip/__about__.py"
 
 [tool.hatch.envs.default]
 python = "3.11"
 path = ".pypip/envs/pypip"
-dependencies = ["click", "tomlkit", "requests"]
+dependencies = []
 
 [tool.hatch.envs.types]
 extra-dependencies = [
