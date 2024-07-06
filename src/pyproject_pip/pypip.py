@@ -79,71 +79,69 @@ def modify_requirements(package_name, package_version=None, action="install") ->
         f.writelines(lines)
 
 
+def is_group(line):
+    return "[" in line and "]" in line and "\"" not in line[line.index("["):line.index("]")]
+
+def process_dependencies(line, output_lines):
+    if "[" in line and ("]" not in line or "," not in line):
+        start = line.index("[")
+        output_lines.append(line[:start + 1])
+        line = line[start + 1:]
+
+    deps = line.split(",")
+    for dep in deps:
+        if dep.endswith("]"):
+            dep = dep.replace("]", "")
+            output_lines.append(dep)
+            output_lines.append("]")
+            continue
+        new_dep = dep + "," if dep != deps[-1] else dep
+        if new_dep.strip():
+            output_lines.append(new_dep)
+
+    
 
 def write_pyproject(data):
     with open("pyproject.toml", "w") as f:
         toml_str = tomlkit.dumps(data)
         inside_dependencies = False
         inside_optional_dependencies = False
-        # Ensure items in optional and project dependencies are on separate lines
+
         input_lines = toml_str.splitlines()
         output_lines = []
-        for line in input_lines:
-            # print(f"line: {line}, inside_dependencies: {inside_dependencies}, inside_optional_dependencies: {inside_optional_dependencies}")
-            line = line.rstrip()
-            if "." in line or (("[" in line and "]" in line) and "," not in line):
+        for input_line in input_lines:
+            line = input_line.rstrip()
+            if is_group(line):
                 inside_dependencies = False
-                inside_optional_dependencies = False
-            if "optional-dependencies" in line:
-                inside_optional_dependencies = True
+                inside_optional_dependencies = "optional-dependencies" in line
+                output_lines.append(line)
+                continue
+
+            if "]" in line and inside_dependencies and not "[" in line:
                 inside_dependencies = False
-            if inside_optional_dependencies and not inside_dependencies:
-                if "[" in line  and "." not in line and "[]" not in line:
-                    if line.lstrip().startswith("["):
-                        output_lines.append("[")
-                        line = line.replace("[", "")
-                if "]" in line:
-                    if not ("[" in line and "," in line):
-                        output_lines.append(line)
-                        continue
-                deps = line.split(",")
-                for dep in deps:
-                    new_dep = dep + "," if dep != deps[-1] else dep
-                    if dep.endswith("]") and "\n]" not in dep:
-                        new_dep = new_dep.replace("]", "\n]")
-                    if new_dep.strip():
-                        output_lines.append(new_dep)
-            if "dependencies" in line and not inside_optional_dependencies:
+
+            if inside_optional_dependencies:
+                process_dependencies(line, output_lines)
+    
+            if "dependencies" in line and not "optional-dependencies" in line and not "extra-dependencies" in line and not inside_optional_dependencies:
                 inside_dependencies = True
                 inside_optional_dependencies = False
+                output_lines.append(line[:line.index("[") + 1])
+                line = line[line.index("[") + 1:]
+
             if inside_dependencies and not inside_optional_dependencies:
                 inside_optional_dependencies = False
-                if "[" in line  and "." not in line and "[]" not in line:
-                    if line.lstrip().startswith("["):
-                        output_lines.append("[")
-                        line = line.replace("[", "")
-                if "]" in line:
-                    inside_dependencies = False
-                    if not ("[" in line and "," in line):
-                        output_lines.append(line)
-                        continue
-                deps = line.split(",")
-                for dep in deps:
-                    new_dep = dep + "," if dep != deps[-1] else dep
-                    if dep.endswith("]") and "\n]" not in dep:
-                        new_dep = new_dep.replace("]", "\n]")
-                    if new_dep.strip():
-                        output_lines.append(new_dep)
+                process_dependencies(line, output_lines)
+
             elif not inside_dependencies and not inside_optional_dependencies:
                 output_lines.append(line)
-        new_line = False
+
+        written = []
         for line in output_lines:
-            if not line.strip() and new_line:
-                continue
-            elif not line.strip():
-                new_line = True
-            else:
-                new_line = False
+            if is_group(line) and written and not written[-1].endswith("\n"):
+                f.write("\n")
+                written.append("\n")
+            written.append(line + "\n")
             f.write(line + "\n")
 
 def base_name(package_name):
@@ -200,9 +198,8 @@ def modify_pyproject_toml(
 
     # Prepare the package string with version if provided
     package_version_str = f"{package_name}{('==' + package_version) if package_version else ''}"
-    print(f"package_version_str: {package_version_str}")
-    base_project =  pyproject["tool"]["hatch"]["envs"][hatch_env] if is_hatch_env else pyproject.get("project", {})
-    optional_base = pyproject["tool"]["hatch"]["envs"][hatch_env].get("optional-dependencies", {}) if is_hatch_env else pyproject["project"]["optional-dependencies"]
+    base_project =  pyproject.get("tool", {}).get("hatch", {}).get("envs", {}).get(hatch_env, {}) if is_hatch_env else pyproject.get("project", {})
+    optional_base = pyproject.get("project").get("optional-dependencies", {})
     
     if is_optional:
         dependencies = optional_base.get(dependency_group, [])
@@ -210,6 +207,7 @@ def modify_pyproject_toml(
 
         all_group = optional_base.get("all", [])
         optional_base["all"] = modify_dependencies(all_group, package_version_str, action)
+        pyproject["project"]["optional-dependencies"] = optional_base
     else:
         dependencies = base_project.get("dependencies", [])
         base_project["dependencies"] = modify_dependencies(dependencies, package_version_str, action)
@@ -223,7 +221,7 @@ def modify_pyproject_toml(
 
 @click.group(invoke_without_command=True)
 @click.pass_context
-@click.option("--hatch-env", default=None, help="Specify the Hatch environment to use")
+@click.option("-v", "--hatch-env", default=None, help="Specify the Hatch environment to use")
 def cli(ctx, hatch_env) -> None:
     """Main CLI entry point. If no subcommand is provided, it shows the dependencies.
 
@@ -289,12 +287,10 @@ def install_command(packages, requirements, upgrade, editable, hatch_env, depend
             if new_packages:
                 for new_package in new_packages:
                     package_name, package_version = new_package.split("==")
-                    print(f"package_name latest: {package_name}, package_version: {package_version}")
                     modify_requirements(package_name, package_version, action="install")
                     modify_pyproject_toml(package_name, package_version, action="install", hatch_env=hatch_env, dependency_group=dependency_group)
             else:
                 package_version = get_latest_version(package)
-                print(f"package_name latest second: {package}")
                 modify_pyproject_toml(package,package_version, action="install", hatch_env=hatch_env, dependency_group=dependency_group)
 
     except subprocess.CalledProcessError as e:
@@ -388,7 +384,7 @@ def uninstall_command(packages, hatch_env, dependency_group) -> None:
 
 
 @cli.command("show")
-@click.option("--hatch-env", default="default", help="Specify the Hatch environment to use")
+@click.option("--hatch-env", default=None, help="Specify the Hatch environment to use")
 def show_command(hatch_env) -> None:
     """Show the dependencies from the pyproject.toml file.
 
@@ -401,19 +397,20 @@ def show_command(hatch_env) -> None:
             pyproject = tomlkit.parse(content)
 
         # Determine if we are using Hatch or defaulting to project dependencies
-        if "tool" in pyproject and "hatch" in pyproject["tool"]:
-            dependencies = pyproject["tool"]["hatch"]["envs"][hatch_env]["dependencies"]
+        if "tool" in pyproject and "hatch" in pyproject["tool"] and hatch_env is not None:
+            dependencies = pyproject.get("tool", {}).get("hatch", {}).get("envs", {}).get(hatch_env, {}).get("dependencies", [])   
         else:
             dependencies = pyproject.get("project", {}).get("dependencies", [])
 
-        for _dep in dependencies:
-            pass
+        if dependencies:
+            click.echo("Dependencies:")
+            for dep in dependencies:
+                click.echo(f"  {dep}")
     except FileNotFoundError:
-        pass
-    except Exception:
-        pass
-
-
+        click.echo("pyproject.toml file not found.")
+        sys.exit(1)
+    finally:
+        sys.exit(0)
 
 if __name__ == "__main__":
     cli()
