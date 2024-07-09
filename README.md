@@ -1,4 +1,4 @@
-# pyproject-pip
+# pyproject-pip (WIP)
 
 [![PyPI - Version](https://img.shields.io/pypi/v/pyproject-pip.svg)](https://pypi.org/project/pyproject-pip)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/pyproject-pip.svg)](https://pypi.org/project/pyproject-pip)
