@@ -4,8 +4,8 @@
 from .pypip import cli as pypip_cli
 
 __all__ = [
-  "pypip_cli",
-] 
+    "pypip_cli",
+]
 
-if __name__ == '__main__':
-  pypip_cli()
+if __name__ == "__main__":
+    pypip_cli()
