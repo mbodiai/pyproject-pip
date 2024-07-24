@@ -84,24 +84,25 @@ def is_group(line):
 
 def process_dependencies(line, output_lines):
     # Ensure each dependency is on a new line and indented by 2 spaces
-    # Handle extras in the package name
-    dependencies = [dep.strip() for dep in line.split(',')]
+    # Handle extras in the package name and preserve quotes
+    dependencies = line.split(',')
     for dep in dependencies:
+        dep = dep.strip()
         if "=" in dep:
-            parts = dep.split("=")
+            parts = dep.split("=", 1)
             package = parts[0].strip()
-            version = "=".join(parts[1:]).strip().strip('"')
+            version = parts[1].strip()
             
             # Handle extras in the package name
             if "[" in package and "]" in package:
                 base_package, extras = package.split("[")
                 extras = extras.rstrip("]")
-                output_lines.append(f'  {base_package}[{extras}] = "{version}"')
+                output_lines.append(f'  {base_package}[{extras}] = {version}')
             else:
-                output_lines.append(f'  {package} = "{version}"')
-        elif dep.strip():
+                output_lines.append(f'  {package} = {version}')
+        elif dep:
             # For dependencies without version specifiers
-            output_lines.append(f'  {dep.strip()}')
+            output_lines.append(f'  {dep}')
 
 def write_pyproject(data):
     with open("pyproject.toml", "w") as f:
