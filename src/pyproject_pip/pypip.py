@@ -5,9 +5,10 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-import toml
+import tomlkit
 import click
 import requests
+import tomlkit
 
 
 def get_latest_version(package_name):
@@ -81,46 +82,86 @@ def modify_requirements(package_name, package_version=None, action="install") ->
 def is_group(line):
     return "[" in line and "]" in line and "\"" not in line[line.index("["):line.index("]")]
 
+
 def process_dependencies(line, output_lines):
-    # Ensure each dependency is on a new line and indented by 2 spaces
-    # Handle extras in the package name and preserve quotes
-    dependencies = line.split(',')
-    for dep in dependencies:
-        dep = dep.strip()
-        if "=" in dep:
-            parts = dep.split("=", 1)
-            package = parts[0].strip()
-            version = parts[1].strip()
-            
-            # Handle extras in the package name
-            if "[" in package and "]" in package:
-                base_package, extras = package.split("[")
-                extras = extras.rstrip("]")
-                output_lines.append(f'  {base_package}[{extras}] = {version}')
-            else:
-                output_lines.append(f'  {package} = {version}')
-        elif ">" in dep or "<" in dep:
-            # Handle version specifiers like >=, >, <, <=
-            parts = dep.split(None, 1)
-            package = parts[0].strip()
-            version = parts[1].strip() if len(parts) > 1 else ""
-            output_lines.append(f'  {package} {version}')
-        elif dep:
-            # For dependencies without version specifiers
-            output_lines.append(f'  {dep}')
+    lines = []
+    if "[" in line and ("]" not in line or "," not in line):
+        start = line.index("[")
+        lines.append(line[:start + 1])
+        line = line[start + 1:]
+
+    deps = line.split(",")
+    i = 0
+    while i < len(deps):
+        dep = deps[i]
+        if "[" in dep and "]" not in dep:
+            while "]" not in dep:
+                dep += "," + deps[i+1]
+                i += 1
+            lines.append(dep + ",")
+            i += 1
+            continue
+        if dep.endswith("]"):
+            dep = dep.replace("]", "")
+            lines.append(dep)
+            lines.append("]")
+            i += 1
+            continue
+        new_dep = dep + "," if dep != deps[-1] else dep
+        if new_dep.strip():
+            lines.append(new_dep)
+        i += 1
     
-    # Remove any duplicate '=' signs
-    output_lines = [line.replace('= =', '=') for line in output_lines]
+    for line in lines:
+        output_lines.append("  " + line.strip() if not line.strip().startswith("[") else line.strip())
+
     
-    # Handle special cases like 'transformers>=4.42.4'
-    output_lines = [line.replace('> =', '>=') for line in output_lines]
     
-    # Handle multi-line dependencies
-    output_lines = [line.replace('\n', '') for line in output_lines]
+
+    
 
 def write_pyproject(data):
     with open("pyproject.toml", "w") as f:
-        toml.dump(data, f)
+        toml_str = tomlkit.dumps(data)
+        inside_dependencies = False
+        inside_optional_dependencies = False
+
+        input_lines = toml_str.splitlines()
+        output_lines = []
+        for input_line in input_lines:
+            line = input_line.rstrip()
+            if is_group(line):
+                inside_dependencies = False
+                inside_optional_dependencies = "optional-dependencies" in line
+                output_lines.append(line)
+                continue
+
+            if "]" in line and inside_dependencies and not "[" in line:
+                inside_dependencies = False
+
+            if inside_optional_dependencies:
+                process_dependencies(line, output_lines)
+    
+            if "dependencies" in line and not "optional-dependencies" in line and not "extra-dependencies" in line and not inside_optional_dependencies:
+                inside_dependencies = True
+                inside_optional_dependencies = False
+                output_lines.append(line[:line.index("[") + 1])
+                line = line[line.index("[") + 1:]
+
+            if inside_dependencies and not inside_optional_dependencies:
+                inside_optional_dependencies = False
+                process_dependencies(line, output_lines)
+
+            elif not inside_dependencies and not inside_optional_dependencies:
+                output_lines.append(line)
+
+        written = []
+        for line in output_lines:
+            if is_group(line) and written and not written[-1].endswith("\n"):
+                f.write("\n")
+                written.append("\n")
+            written.append(line + "\n")
+            f.write(line + "\n")
 
 def base_name(package_name):
     """Extract the base package name from a package name with optional extras.
@@ -147,6 +188,7 @@ def modify_dependencies(dependencies, package_version_str, action):
     dependencies = [dep.strip() for dep in dependencies if base_name(dep) != base_name(package_version_str)]
     if action == "install":
         dependencies.append(package_version_str.strip())
+    dependencies.sort(key=lambda x: x.lower())  # Sort dependencies alphabetically
     return dependencies
 
 def modify_pyproject_toml(
@@ -166,7 +208,8 @@ def modify_pyproject_toml(
         dependency_group (str, optional): The group of dependencies to modify. Defaults to "dependencies".
     """
     with open("pyproject.toml") as f:
-        pyproject = toml.load(f)
+        content = f.read()
+        pyproject = tomlkit.parse(content)
 
     is_optional = dependency_group != "dependencies"
     is_hatch_env = hatch_env and "tool" in pyproject and "hatch" in pyproject["tool"]
@@ -313,7 +356,8 @@ def is_package_in_pyproject(package_name, hatch_env=None) -> bool:
     if not Path("pyproject.toml").exists():
         raise FileNotFoundError("pyproject.toml file not found.")
     with open("pyproject.toml") as f:
-        pyproject = toml.load(f)
+        content = f.read()
+        pyproject = tomlkit.parse(content)
     is_hatch_env = hatch_env and "tool" in pyproject and "hatch" in pyproject["tool"]
     if hatch_env and not is_hatch_env:
         raise ValueError("Hatch environment specified but hatch tool not found in pyproject.toml.")
@@ -369,7 +413,8 @@ def show_command(hatch_env) -> None:
     """
     try:
         with open("pyproject.toml") as f:
-            pyproject = toml.load(f)
+            content = f.read()
+            pyproject = tomlkit.parse(content)
 
         # Determine if we are using Hatch or defaulting to project dependencies
         if "tool" in pyproject and "hatch" in pyproject["tool"] and hatch_env is not None:

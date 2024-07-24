@@ -25,11 +25,12 @@ classifiers = [
   "Programming Language :: Python :: Implementation :: PyPy",
 ]
 dependencies = [
-"tomlkit",
- "click",
- "requests",
+  "click",
+ "mkdocstrings[crystal,python]",
  "packaging",
- "toml==0.10.2"
+ "requests",
+ "toml==0.10.2",
+ "tomlkit"
 ]
 [project.urls]
 Documentation = "https://github.com/mbodiai/pyproject-pip#readme"
@@ -40,6 +41,7 @@ Source = "https://github.com/mbodiai/pyproject-pip"
 pypip = "pyproject_pip.pypip:cli"
 
 
+
 [tool.hatch.version]
 path = "src/pyproject_pip/__about__.py"
 
@@ -47,7 +49,7 @@ path = "src/pyproject_pip/__about__.py"
 python = "3.11"
 path = ".pypip/envs/pypip"
 dependencies = [
-"pyclean==3.0.0"
+  "pyclean==3.0.0"
 ]
 [tool.hatch.envs.types]
 extra-dependencies = [
