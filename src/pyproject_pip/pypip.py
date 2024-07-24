@@ -100,6 +100,12 @@ def process_dependencies(line, output_lines):
                 output_lines.append(f'  {base_package}[{extras}] = {version}')
             else:
                 output_lines.append(f'  {package} = {version}')
+        elif ">" in dep or "<" in dep:
+            # Handle version specifiers like >=, >, <, <=
+            parts = dep.split(None, 1)
+            package = parts[0].strip()
+            version = parts[1].strip() if len(parts) > 1 else ""
+            output_lines.append(f'  {package} {version}')
         elif dep:
             # For dependencies without version specifiers
             output_lines.append(f'  {dep}')
