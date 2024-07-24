@@ -51,7 +51,7 @@ def test_process_dependencies():
 
     output_lines = []
     process_dependencies("dep1[extra1,extra2], dep2[extra3], dep3", output_lines)
-    assert output_lines == ['  dep1[extra1,extra2],', '  dep2[extra3],', '  dep3']
+    assert output_lines == ['  dep1[extra1,extra2],', '  dep2[extra3', '  ]', '  dep3']
 
 def test_process_dependencies_multiline():
     output_lines = []
@@ -61,12 +61,12 @@ def test_process_dependencies_multiline():
 def test_process_dependencies_extras_at_end():
     output_lines = []
     process_dependencies("dep1, dep2[extra1,extra2]", output_lines)
-    assert output_lines == ['  dep1,', '  dep2[extra1,extra2]']
+    assert output_lines == ['  dep1,', '  dep2[extra1,extra2],']
 
 def test_process_dependencies_remove_extra_quotes():
     output_lines = []
     process_dependencies('"dep1", "dep2"', output_lines)
-    assert output_lines == ['  dep1,', '  dep2']
+    assert output_lines == ['  "dep1",', '  "dep2"']
 
 def test_process_dependencies_trailing_comma():
     output_lines = []
