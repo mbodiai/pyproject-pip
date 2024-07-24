@@ -83,10 +83,23 @@ def is_group(line):
     return "[" in line and "]" in line and "\"" not in line[line.index("["):line.index("]")]
 
 def process_dependencies(line, output_lines):
-# Ensure each dependency is on a new line and indented by 2 spaces
-# Handle extras in the package name
-    pass
-    
+    # Ensure each dependency is on a new line and indented by 2 spaces
+    # Handle extras in the package name
+    if "=" in line:
+        parts = line.split("=")
+        package = parts[0].strip()
+        version = "=".join(parts[1:]).strip().strip('"')
+        
+        # Handle extras in the package name
+        if "[" in package and "]" in package:
+            base_package, extras = package.split("[")
+            extras = extras.rstrip("]")
+            output_lines.append(f'  {base_package}[{extras}] = "{version}"')
+        else:
+            output_lines.append(f'  {package} = "{version}"')
+    elif line.strip():
+        # For lines without version specifiers
+        output_lines.append(f'  {line.strip()}')
 
 def write_pyproject(data):
     with open("pyproject.toml", "w") as f:
