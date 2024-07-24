@@ -139,7 +139,8 @@ def write_pyproject(data):
             elif inside_dependencies and "=" in stripped_line:
                 # Dependency line
                 package, version = stripped_line.split("=", 1)
-                output_lines.append(f"    {package.strip()} ={version.strip()}")
+                output_lines.append(f"    {package.strip()} =")
+                output_lines.append(f"        {version.strip()}")
             else:
                 # Other lines
                 output_lines.append(line)
