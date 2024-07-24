@@ -109,6 +109,15 @@ def process_dependencies(line, output_lines):
         elif dep:
             # For dependencies without version specifiers
             output_lines.append(f'  {dep}')
+    
+    # Remove any duplicate '=' signs
+    output_lines = [line.replace('= =', '=') for line in output_lines]
+    
+    # Handle special cases like 'transformers>=4.42.4'
+    output_lines = [line.replace('> =', '>=') for line in output_lines]
+    
+    # Handle multi-line dependencies
+    output_lines = [line.replace('\n', '') for line in output_lines]
 
 def write_pyproject(data):
     with open("pyproject.toml", "w") as f:
