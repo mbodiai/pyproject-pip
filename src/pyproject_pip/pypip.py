@@ -5,10 +5,9 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-import tomlkit
+import toml
 import click
 import requests
-import tomlkit
 
 
 def get_latest_version(package_name):
@@ -121,32 +120,7 @@ def process_dependencies(line, output_lines):
 
 def write_pyproject(data):
     with open("pyproject.toml", "w") as f:
-        toml_str = tomlkit.dumps(data)
-        lines = toml_str.splitlines()
-        
-        # Process the lines to ensure correct formatting
-        output_lines = []
-        inside_dependencies = False
-        for line in lines:
-            stripped_line = line.strip()
-            
-            if stripped_line.startswith("[") and stripped_line.endswith("]"):
-                # Section header
-                if inside_dependencies:
-                    output_lines.append("")  # Add a blank line before new section
-                inside_dependencies = "dependencies" in stripped_line
-                output_lines.append(line)
-            elif inside_dependencies and "=" in stripped_line:
-                # Dependency line
-                package, version = stripped_line.split("=", 1)
-                output_lines.append(f"    {package.strip()} =")
-                output_lines.append(f"        {version.strip()}")
-            else:
-                # Other lines
-                output_lines.append(line)
-        
-        # Write the processed lines
-        f.write("\n".join(output_lines))
+        toml.dump(data, f)
 
 def base_name(package_name):
     """Extract the base package name from a package name with optional extras.
@@ -192,8 +166,7 @@ def modify_pyproject_toml(
         dependency_group (str, optional): The group of dependencies to modify. Defaults to "dependencies".
     """
     with open("pyproject.toml") as f:
-        content = f.read()
-        pyproject = tomlkit.parse(content)
+        pyproject = toml.load(f)
 
     is_optional = dependency_group != "dependencies"
     is_hatch_env = hatch_env and "tool" in pyproject and "hatch" in pyproject["tool"]
@@ -340,8 +313,7 @@ def is_package_in_pyproject(package_name, hatch_env=None) -> bool:
     if not Path("pyproject.toml").exists():
         raise FileNotFoundError("pyproject.toml file not found.")
     with open("pyproject.toml") as f:
-        content = f.read()
-        pyproject = tomlkit.parse(content)
+        pyproject = toml.load(f)
     is_hatch_env = hatch_env and "tool" in pyproject and "hatch" in pyproject["tool"]
     if hatch_env and not is_hatch_env:
         raise ValueError("Hatch environment specified but hatch tool not found in pyproject.toml.")
