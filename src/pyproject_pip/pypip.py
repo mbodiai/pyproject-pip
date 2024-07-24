@@ -369,8 +369,7 @@ def show_command(hatch_env) -> None:
     """
     try:
         with open("pyproject.toml") as f:
-            content = f.read()
-            pyproject = tomlkit.parse(content)
+            pyproject = toml.load(f)
 
         # Determine if we are using Hatch or defaulting to project dependencies
         if "tool" in pyproject and "hatch" in pyproject["tool"] and hatch_env is not None:
