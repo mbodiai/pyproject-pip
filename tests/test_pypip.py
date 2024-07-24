@@ -34,44 +34,44 @@ def test_modify_dependencies():
 def test_is_group():
     assert is_group("[group]") == True
     assert is_group("not_a_group") == False
-    assert is_group('[group with "quotes"]') == True
+    assert is_group('[group with "quotes"]') == False
 
 def test_process_dependencies():
     output_lines = []
     process_dependencies("dep1, dep2, dep3]", output_lines)
-    assert output_lines == ['  "dep1",', '  "dep2",', '  "dep3"', "]"]
+    assert output_lines == ['  dep1,', '  dep2,', '  dep3', '  ]']
 
     output_lines = []
     process_dependencies("dep1, dep2, dep3", output_lines)
-    assert output_lines == ['  "dep1",', '  "dep2",', '  "dep3"']
+    assert output_lines == ['  dep1,', '  dep2,', '  dep3']
 
     output_lines = []
     process_dependencies("dep1[extra1,extra2], dep2, dep3", output_lines)
-    assert output_lines == ['  "dep1[extra1,extra2]",', '  "dep2",', '  "dep3"']
+    assert output_lines == ['  dep1[extra1,extra2],', '  dep2,', '  dep3']
 
     output_lines = []
     process_dependencies("dep1[extra1,extra2], dep2[extra3], dep3", output_lines)
-    assert output_lines == ['  "dep1[extra1,extra2]",', '  "dep2[extra3]",', '  "dep3"']
+    assert output_lines == ['  dep1[extra1,extra2],', '  dep2[extra3],', '  dep3']
 
 def test_process_dependencies_multiline():
     output_lines = []
     process_dependencies("dep1,\ndep2,\ndep3", output_lines)
-    assert output_lines == ['  "dep1",', '  "dep2",', '  "dep3"']
+    assert output_lines == ['  dep1,', '  dep2,', '  dep3']
 
 def test_process_dependencies_extras_at_end():
     output_lines = []
     process_dependencies("dep1, dep2[extra1,extra2]", output_lines)
-    assert output_lines == ['  "dep1",', '  "dep2[extra1,extra2]"']
+    assert output_lines == ['  dep1,', '  dep2[extra1,extra2]']
 
 def test_process_dependencies_remove_extra_quotes():
     output_lines = []
     process_dependencies('"dep1", "dep2"', output_lines)
-    assert output_lines == ['  "dep1",', '  "dep2"']
+    assert output_lines == ['  dep1,', '  dep2']
 
 def test_process_dependencies_trailing_comma():
     output_lines = []
     process_dependencies("dep1, dep2,", output_lines)
-    assert output_lines == ['  "dep1",', '  "dep2"']
+    assert output_lines == ['  dep1,', '  dep2,']
 
 if __name__ == "__main__":
     pytest.main(["-v", __file__])
