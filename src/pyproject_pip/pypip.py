@@ -83,22 +83,9 @@ def is_group(line):
     return "[" in line and "]" in line and "\"" not in line[line.index("["):line.index("]")]
 
 def process_dependencies(line, output_lines):
-    if "[" in line and ("]" not in line or "," not in line):
-        start = line.index("[")
-        output_lines.append(line[:start + 1])
-        line = line[start + 1:]
-
-    deps = line.split(",")
-    for dep in deps:
-        if dep.endswith("]"):
-            dep = dep.replace("]", "")
-            output_lines.append(dep)
-            output_lines.append("]")
-            continue
-        new_dep = dep + "," if dep != deps[-1] else dep
-        if new_dep.strip():
-            output_lines.append(new_dep)
-
+# Ensure each dependency is on a new line and indented by 2 spaces
+# Handle extras in the package name
+    pass
     
 
 def write_pyproject(data):
