@@ -122,45 +122,30 @@ def process_dependencies(line, output_lines):
 def write_pyproject(data):
     with open("pyproject.toml", "w") as f:
         toml_str = tomlkit.dumps(data)
-        inside_dependencies = False
-        inside_optional_dependencies = False
-
-        input_lines = toml_str.splitlines()
+        lines = toml_str.splitlines()
+        
+        # Process the lines to ensure correct formatting
         output_lines = []
-        for input_line in input_lines:
-            line = input_line.rstrip()
-            if is_group(line):
-                inside_dependencies = False
-                inside_optional_dependencies = "optional-dependencies" in line
+        inside_dependencies = False
+        for line in lines:
+            stripped_line = line.strip()
+            
+            if stripped_line.startswith("[") and stripped_line.endswith("]"):
+                # Section header
+                if inside_dependencies:
+                    output_lines.append("")  # Add a blank line before new section
+                inside_dependencies = "dependencies" in stripped_line
                 output_lines.append(line)
-                continue
-
-            if "]" in line and inside_dependencies and not "[" in line:
-                inside_dependencies = False
-
-            if inside_optional_dependencies:
-                process_dependencies(line, output_lines)
-    
-            if "dependencies" in line and not "optional-dependencies" in line and not "extra-dependencies" in line and not inside_optional_dependencies:
-                inside_dependencies = True
-                inside_optional_dependencies = False
-                output_lines.append(line[:line.index("[") + 1])
-                line = line[line.index("[") + 1:]
-
-            if inside_dependencies and not inside_optional_dependencies:
-                inside_optional_dependencies = False
-                process_dependencies(line, output_lines)
-
-            elif not inside_dependencies and not inside_optional_dependencies:
+            elif inside_dependencies and "=" in stripped_line:
+                # Dependency line
+                package, version = stripped_line.split("=", 1)
+                output_lines.append(f"    {package.strip()} ={version.strip()}")
+            else:
+                # Other lines
                 output_lines.append(line)
-
-        written = []
-        for line in output_lines:
-            if is_group(line) and written and not written[-1].endswith("\n"):
-                f.write("\n")
-                written.append("\n")
-            written.append(line + "\n")
-            f.write(line + "\n")
+        
+        # Write the processed lines
+        f.write("\n".join(output_lines))
 
 def base_name(package_name):
     """Extract the base package name from a package name with optional extras.
