@@ -1,13 +1,43 @@
 """Synchronizes requirements and hatch pyproject."""
 
 import logging
+import re
 import subprocess
 import sys
 from pathlib import Path
+import markdown2
 import tomlkit
-import click
 import requests
-import xmlrpc.client
+
+def clean_text(md_text):
+    """Convert Markdown to clean plain text."""
+    # Convert Markdown to HTML using markdown2
+    html_description = markdown2.markdown(md_text)
+
+    # Function to remove HTML tags
+    def strip_html_tags(html):
+        clean = re.compile('<.*?>')
+        return re.sub(clean, '', html)
+
+    # Strip HTML tags to get plain text
+    plain_text_description = strip_html_tags(html_description)
+
+    # Function to remove reStructuredText (reST) directives and roles
+    def strip_rst(text):
+        # Remove reST directives and roles
+        text = re.sub(r'\.\. .*:: .*', '', text)  # remove directives like .. image:: URL
+        text = re.sub(r':\w+:.*', '', text)  # remove roles like :target: URL
+        text = re.sub(r'\.\. _.*: .*', '', text)  # remove hyperlink targets like .. _name: URL
+        return text
+
+    # Clean the plain text description from reST and other special characters
+    clean_text = strip_rst(plain_text_description)
+    clean_text = re.sub(r'&nbsp;', ' ', clean_text)  # Replace HTML entities
+    # clean_text = re.sub(r'\n{2,}', '\n\n', clean_text)  # Replace multiple newlines with a single newline
+    clean_text = clean_text.strip()
+    # clean_text = clean_text.replace("\n", " ")
+
+    return clean_text
 
 def get_latest_version(package_name):
     """Gets the latest version of the specified package from PyPI.
@@ -30,6 +60,37 @@ def get_latest_version(package_name):
     except Exception:
         pass
     return None
+
+def search_package(package_name):
+    """Search for a package on PyPI and return the description, details, and GitHub URL if available.
+
+    Args:
+        package_name (str): The name of the package to search for.
+    
+    Returns:
+        dict: The package information.
+    """
+    package_info = {}
+    try:
+        response = requests.get(f"https://pypi.org/pypi/{package_name}/json")
+        response.raise_for_status()  # Raises stored HTTPError, if one occurred.
+        data = response.json()
+        info = data.get("info", {})
+        
+        package_info["description"] = info.get("summary", "")
+        package_info["details"] = info.get("description", "")
+        
+        # Get GitHub URL if available
+        project_urls = info.get("project_urls", {})
+        package_info["github_url"] = next(
+            (url for _, url in project_urls.items() if "github.com" in url.lower()), None
+        )
+    except requests.RequestException as e:
+        print(f"HTTP error occurred: {e}")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+    
+    return package_info
 
 
 def get_package_names(query_key):
@@ -62,7 +123,8 @@ def get_package_names(query_key):
     
     return package_names
 
-def get_package_info(package_name):
+
+def get_package_info(package_name, verbose=False):
     """Retrieve detailed package information from PyPI JSON API."""
     package_url = f"https://pypi.org/pypi/{package_name}/json"
     response = requests.get(package_url)
@@ -70,18 +132,30 @@ def get_package_info(package_name):
     package_data = response.json()
     
     info = package_data.get("info", {})
+
     downloads = package_data.get("downloads", {}).get("last_month", 0)
     
+
     package_info = {
         "name": info.get("name", ""),
         "version": info.get("version", ""),
         "summary": info.get("summary", ""),
         "downloads": downloads
     }
-    
+    if verbose:
+        package_info["description"] = clean_text(info.get("description", ""))
+    project_urls = info.get("project_urls", {})
+    try:
+        package_info["github_url"] = next(
+            (url for _, url in project_urls.items() if "github.com" in url.lower()), None
+        )
+    except (StopIteration, TypeError, AttributeError):
+        package_info["github_url"] = None
+
     return package_info
 
-def find_and_sort(query_key, sort_key="downloads") -> list:
+
+def find_and_sort(query_key, limit=5, sort_key="downloads") -> list:
     """Find and sort potential packages by a specified key.
 
     Args:
@@ -97,87 +171,12 @@ def find_and_sort(query_key, sort_key="downloads") -> list:
         for package_name in package_names:
             package_info = get_package_info(package_name)
             packages.append(package_info)
-        
         # Sort the packages by the specified key
         sorted_packages = sorted(packages, key=lambda x: x.get(sort_key, 0), reverse=True)
-        return sorted_packages
-    
+        return sorted_packages[:limit]
+
     except requests.RequestException as e:
         print(f"HTTP error occurred: {e}")
-        return []
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        return []
-
-def search_package(package_name):
-    """Search for a package on PyPI and return the description, details, and GitHub URL if available.
-
-    Args:
-        package_name (str): The name of the package to search for.
-    
-    Returns:
-        dict: The package information.
-    """
-    package_info = {}
-    try:
-        response = requests.get(f"https://pypi.org/pypi/{package_name}/json")
-        response.raise_for_status()  # Raises stored HTTPError, if one occurred.
-        data = response.json()
-        info = data.get("info", {})
-        
-        package_info["description"] = info.get("summary", "")
-        package_info["details"] = info.get("description", "")
-        
-        # Get GitHub URL if available
-        project_urls = info.get("project_urls", {})
-        package_info["github_url"] = next(
-            (url for name, url in project_urls.items() if "github.com" in url.lower()), None
-        )
-    except requests.RequestException as e:
-        print(f"HTTP error occurred: {e}")
-    except Exception as e:
-        print(f"An error occurred: {e}")
-    
-    return package_info
-
-
-
-def find_and_sort(query_key, sort_key="downloads") -> list:
-    """Find and sort potential packages by a specified key.
-
-    Args:
-        query_key (str): The key to query for.
-        sort_key (str): The key to sort by. Defaults to "downloads".
-        
-    Returns:
-        list: List of packages sorted by the specified key.
-    """
-    try:
-        client = xmlrpc.client.ServerProxy('https://pypi.org/pypi')
-        
-        # Perform search
-        search_results = client.search({'name': query_key}, 'or')
-        
-        # Extract and process relevant package info
-        packages = []
-        for result in search_results:
-            package_info = {
-                "name": result.get("name"),
-                "version": result.get("version"),
-                "summary": result.get("summary", ""),
-                "downloads": result.get("downloads", {}).get("last_month", 0)
-            }
-            packages.append(package_info)
-        
-        # Sort the packages by the specified key
-        sorted_packages = sorted(packages, key=lambda x: x.get(sort_key, 0), reverse=True)
-        return sorted_packages
-    
-    except xmlrpc.client.ProtocolError as e:
-        print(f"Protocol error occurred: {e.errcode} - {e.errmsg}")
-        return []
-    except xmlrpc.client.Fault as e:
-        print(f"A fault occurred: {e.faultCode} - {e.faultString}")
         return []
     except Exception as e:
         print(f"An error occurred: {e}")
@@ -195,23 +194,20 @@ def modify_requirements(package_name, package_version=None, action="install") ->
     Raises:
         FileNotFoundError: If the requirements.txt file does not exist when attempting to read.
     """
-    try:
-        with open("requirements.txt") as f:
-            lines = f.readlines()
-    except FileNotFoundError:
-        logging.warning("requirements.txt file not found, creating a new file.")
-        lines = []
-
-    # Filter out comments and empty lines
-    lines = [line.strip() for line in lines if line.strip() and not line.strip().startswith("#")]
+    print("Modifying requirements.txt file: ", package_name, package_version, action)
+    lines = get_requirements_packages(as_set=False)
 
     # Extract the base package name and optional extras
     base_package_name, *extras = package_name.split("[")
     extras_str = "[" + ",".join(extras) if extras else ""
     package_line = next((line for line in lines if base_package_name == line.split("[")[0].split("==")[0]), None)
 
-    if action == "install" and package_version:
-        new_line = f"{base_package_name}{extras_str}=={package_version}"
+    if action == "install":
+        if package_version is not  None:
+            new_line = f"{base_package_name}{extras_str}=={package_version}"
+        else:
+            new_line = f"{base_package_name}{extras_str}"
+
         if package_line:
             # Replace the line with the same base package name
             lines = [line if base_package_name != line.split("[")[0].split("==")[0] else new_line for line in lines]
@@ -224,7 +220,7 @@ def modify_requirements(package_name, package_version=None, action="install") ->
 
     # Ensure each line ends with a newline character
     lines = [line + "\n" for line in lines]
-
+    print("writing lines: ", lines)
     with open("requirements.txt", "w") as f:
         f.writelines(lines)
 
@@ -265,11 +261,6 @@ def process_dependencies(line, output_lines):
     for line in lines:
         output_lines.append("  " + line.strip() if not line.strip().startswith("[") else line.strip())
 
-    
-    
-
-    
-
 def write_pyproject(data):
     with open("pyproject.toml", "w") as f:
         toml_str = tomlkit.dumps(data)
@@ -286,13 +277,13 @@ def write_pyproject(data):
                 output_lines.append(line)
                 continue
 
-            if "]" in line and inside_dependencies and not "[" in line:
+            if "]" in line and inside_dependencies and "[" not in line:
                 inside_dependencies = False
 
             if inside_optional_dependencies:
                 process_dependencies(line, output_lines)
     
-            if "dependencies" in line and not "optional-dependencies" in line and not "extra-dependencies" in line and not inside_optional_dependencies:
+            if "dependencies" in line and "optional-dependencies" not in line and "extra-dependencies" not in line and not inside_optional_dependencies:
                 inside_dependencies = True
                 inside_optional_dependencies = False
                 output_lines.append(line[:line.index("[") + 1])
@@ -323,6 +314,14 @@ def base_name(package_name):
         str: The base package name without extras.
     """
     return package_name.split("[")[0].split("==")[0]
+
+def name_and_version(package_name, upgrade=False):
+    if upgrade:
+        version = get_latest_version(base_name(package_name))
+        return base_name(package_name), version
+    if "==" in package_name:
+        return package_name.split("==")
+    return package_name, None
 
 def modify_dependencies(dependencies, package_version_str, action):
     """Modify the dependencies list for installing or uninstalling a package.
@@ -389,84 +388,14 @@ def modify_pyproject_toml(
     write_pyproject(pyproject)
 
 
-@click.group(invoke_without_command=True)
-@click.pass_context
-@click.option("-v", "--hatch-env", default=None, help="Specify the Hatch environment to use")
-def cli(ctx, hatch_env) -> None:
-    """Main CLI entry point. If no subcommand is provided, it shows the dependencies.
-
-    Args:
-        ctx (click.Context): Click context object.
-        hatch_env (str, optional): The Hatch environment to use. Defaults to "default".
-    """
-    if ctx.invoked_subcommand is None:
-        show_command(hatch_env)
-
-
 def get_pip_freeze():
     """Get the list of installed packages as a set.
 
     Returns:
         set: Set of installed packages with their versions.
     """
-    result = subprocess.run([sys.executable, "-m", "pip", "freeze"], stdout=subprocess.PIPE, check=False)
+    result = subprocess.run([sys.executable, "-m", "pip", "freeze", "--local"], stdout=subprocess.PIPE, check=False)
     return set(result.stdout.decode().splitlines())
-
-
-@cli.command("install")
-@click.argument("packages", nargs=-1)
-@click.option(
-    "-r", "--requirements", type=click.Path(exists=True), help="Install packages from the given requirements file",
-)
-@click.option("-U", "--upgrade", is_flag=True, help="Upgrade the package(s)")
-@click.option("-e", "--editable", is_flag=True, help="Install a package in editable mode")
-@click.option("--hatch-env", default=None ,help="Specify the Hatch environment to use")
-@click.option("-g", "--dependency-group", default="dependencies", help="Specify the dependency group to use")
-def install_command(packages, requirements, upgrade, editable, hatch_env, dependency_group) -> None:
-    """Install packages and update requirements.txt and pyproject.toml accordingly.
-
-    Args:
-        packages (tuple): Packages to install.
-        requirements (str, optional): Path to requirements file. If provided, install packages from this file.
-        upgrade (bool, optional): Whether to upgrade the packages. Defaults to False.
-        editable (bool, optional): Whether to install a package in editable mode. Defaults to False.
-        hatch_env (str, optional): The Hatch environment to use. Defaults to "default".
-        dependency_group (str, optional): The dependency group to use. Defaults to "dependencies".
-    """
-    try:
-        if requirements:
-            with open(requirements) as f:
-                packages = [line.strip() for line in f if line.strip() and not line.startswith("#")]
-
-        initial_packages = get_requirements_packages()
-
-
-        for package in packages:
-            package_install_cmd = [sys.executable, "-m", "pip", "install"]
-            if editable:
-                package_install_cmd.append("-e")
-            if upgrade:
-                package_install_cmd.append("-U")
-            package_install_cmd.append(package)
-            subprocess.check_call(package_install_cmd)
-            modify_requirements(package, action="install")
-
-            # Determine the newly installed package by comparing pip freeze output
-            final_packages = get_requirements_packages()
-            new_packages = final_packages - initial_packages
-            if new_packages:
-                for new_package in new_packages:
-                    package_name, package_version = new_package.split("==")
-                    modify_requirements(package_name, package_version, action="install")
-                    modify_pyproject_toml(package_name, package_version, action="install", hatch_env=hatch_env, dependency_group=dependency_group)
-            else:
-                package_version = get_latest_version(package)
-                modify_pyproject_toml(package,package_version, action="install", hatch_env=hatch_env, dependency_group=dependency_group)
-
-    except subprocess.CalledProcessError as e:
-        click.echo(f"Error: Failed to install {package}.", err=True)
-        click.echo(f"Reason: {e}", err=True)
-        sys.exit(e.returncode)
 
 
 def is_package_in_requirements(package_name) -> bool:
@@ -483,14 +412,15 @@ def is_package_in_requirements(package_name) -> bool:
     with open("requirements.txt") as f:
         return any(base_name(package_name) == base_name(line) for line in f)
 
-def get_requirements_packages():
+def get_requirements_packages(requirements="requirements.txt", as_set=True):
     """Get the list of packages from the requirements.txt file.
 
     Returns:
         set: Set of packages listed in the requirements.txt file.
     """
-    with open("requirements.txt") as f:
-        return set(line.strip() for line in f if line.strip() and not line.strip().startswith("#"))
+    with open(requirements) as f:
+        lines = [line.strip() for line in f if line.strip() and not line.strip().startswith("#")]
+    return set(lines) if as_set else lines
 
 
 def is_package_in_pyproject(package_name, hatch_env=None) -> bool:
@@ -516,71 +446,3 @@ def is_package_in_pyproject(package_name, hatch_env=None) -> bool:
     else:
         dependencies = pyproject.get("dependencies", [])
     return any(package_name in dep for dep in dependencies)
-
-
-@cli.command("uninstall")
-@click.argument("packages", nargs=-1)
-@click.option("--hatch-env", default=None, help="Specify the Hatch environment to use")
-@click.option("-g", "--dependency-group", default="dependencies", help="Specify the dependency group to use")
-def uninstall_command(packages, hatch_env, dependency_group) -> None:
-    """Uninstall packages and update requirements.txt and pyproject.toml accordingly.
-
-    Args:
-        packages (tuple): Packages to uninstall.
-        hatch_env (str, optional): The Hatch environment to use. Defaults to "default".
-    """
-    for package in packages:
-        package_name = package.split("==")[0].split("[")[0]  # Handle extras
-        in_requirements = is_package_in_requirements(package_name)
-        in_pyproject = is_package_in_pyproject(package_name, hatch_env)
-
-        # if not in_requirements and not in_pyproject:
-        #     click.echo(f"Package '{package_name}' is not listed in requirements.txt or pyproject.toml, skipping.")
-        #     continue
-
-        try:
-            subprocess.check_call([sys.executable, "-m", "pip", "uninstall", package_name, "-y"])
-            modify_requirements(package_name, action="uninstall")
-            modify_pyproject_toml(package_name, action="uninstall", hatch_env=hatch_env, dependency_group=dependency_group)
-            click.echo(f"Successfully uninstalled {package_name}")
-        except subprocess.CalledProcessError as e:
-            click.echo(f"Error: Failed to uninstall {package_name}.", err=True)
-            click.echo(f"Reason: {e}", err=True)
-            sys.exit(e.returncode)
-        except Exception as e:
-            click.echo(f"Unexpected error occurred while trying to uninstall {package_name}:", err=True)
-            click.echo(f"{e}", err=True)
-            sys.exit(1)
-
-
-@cli.command("show")
-@click.option("--hatch-env", default=None, help="Specify the Hatch environment to use")
-def show_command(hatch_env) -> None:
-    """Show the dependencies from the pyproject.toml file.
-
-    Args:
-        hatch_env (str, optional): The Hatch environment to use. Defaults to "default".
-    """
-    try:
-        with open("pyproject.toml") as f:
-            content = f.read()
-            pyproject = tomlkit.parse(content)
-
-        # Determine if we are using Hatch or defaulting to project dependencies
-        if "tool" in pyproject and "hatch" in pyproject["tool"] and hatch_env is not None:
-            dependencies = pyproject.get("tool", {}).get("hatch", {}).get("envs", {}).get(hatch_env, {}).get("dependencies", [])   
-        else:
-            dependencies = pyproject.get("project", {}).get("dependencies", [])
-
-        if dependencies:
-            click.echo("Dependencies:")
-            for dep in dependencies:
-                click.echo(f"  {dep}")
-    except FileNotFoundError:
-        click.echo("pyproject.toml file not found.")
-        sys.exit(1)
-    finally:
-        sys.exit(0)
-
-if __name__ == "__main__":
-    cli()

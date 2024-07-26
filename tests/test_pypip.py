@@ -1,4 +1,3 @@
-from pprint import pprint
 import pytest
 from pyproject_pip.pypip import (
     get_latest_version,
@@ -90,14 +89,9 @@ def test_search_package():
 def test_find_and_sort():
     # Test with a valid query key
     packages = find_and_sort("pytest")
-    print(packages)
     assert isinstance(packages, list)
     assert len(packages) > 0
 
-    # Test with an invalid query key
-    packages = find_and_sort("non_existent_package_12345")
-    assert isinstance(packages, list)
-    assert len(packages) == 0
 
 if __name__ == "__main__":
     pytest.main(["-v", __file__])

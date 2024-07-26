@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "pyproject-pip"
 dynamic = ["version"]
-description = 'Install and manage pyproject.toml with pip commands.'
+description = 'Install amd manage pyproject.toml with pip commands'
 readme = "README.md"
 requires-python = ">=3.8"
 license = "apache-2.0"
@@ -25,30 +25,62 @@ classifiers = [
   "Programming Language :: Python :: Implementation :: PyPy",
 ]
 dependencies = [
- "click",
- "packaging",
- "requests",
- "toml==0.10.2",
- "tomlkit"
-]
+  "click",
+  "markdown2",
+  "packaging",
+  "requests",
+  "toml",
+  "tomlkit"
+  ]
+[project.scripts]
+pypip = "pyproject_pip.cli:cli"
+
 [project.urls]
 Documentation = "https://github.com/mbodiai/pyproject-pip#readme"
 Issues = "https://github.com/mbodiai/pyproject-pip/issues"
 Source = "https://github.com/mbodiai/pyproject-pip"
 
-[project.scripts]
-pypip = "pyproject_pip.pypip:cli"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
 [tool.hatch.version]
 path = "src/pyproject_pip/__about__.py"
-
 [tool.hatch.envs.default]
 python = "3.11"
 path = ".pypip/envs/pypip"
 dependencies = [
-  "pyclean==3.0.0"
+  "pyclean==3.0.0",
+  "pytest",
 ]
 [tool.hatch.envs.types]
 extra-dependencies = [
@@ -67,7 +99,8 @@ omit = [
 
 [tool.coverage.paths]
 pypip = ["src/pyproject_pip", "*/pyproject_pip/src/pyproject_pip"]
-tests = ["tests", "*/pyproject_pip/tests"]
+pyproject_pip = ["src/pyproject_pip", "*/pyproject-pip/src/pyproject_pip"]
+tests = ["tests", "*/pyproject-pip/tests"]
 
 [tool.coverage.report]
 exclude_lines = [
