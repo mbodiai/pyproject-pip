@@ -1,3 +1,4 @@
+from pprint import pprint
 import pytest
 from pyproject_pip.pypip import (
     get_latest_version,
@@ -5,10 +6,11 @@ from pyproject_pip.pypip import (
     modify_dependencies,
     is_group,
     process_dependencies,
+    search_package,
+    find_and_sort
 )
 
 def test_get_latest_version():
-    # Test with a known package
     assert get_latest_version("pytest") is not None
     # Test with a non-existent package
     assert get_latest_version("non_existent_package_12345") is None
@@ -32,9 +34,9 @@ def test_modify_dependencies():
     assert len(result) == 1
 
 def test_is_group():
-    assert is_group("[group]") == True
-    assert is_group("not_a_group") == False
-    assert is_group('[group with "quotes"]') == False
+    assert is_group("[group]") is True
+    assert is_group("not_a_group") is False
+    assert is_group('[group with "quotes"]') is False
 
 def test_process_dependencies():
     output_lines = []
@@ -72,6 +74,30 @@ def test_process_dependencies_trailing_comma():
     output_lines = []
     process_dependencies("dep1, dep2,", output_lines)
     assert output_lines == ['  dep1,', '  dep2,']
+
+def test_search_package():
+
+    # Test with a known package
+    package_info = search_package("pytest")
+    assert len(package_info["description"]) > 0
+    assert len(package_info["details"]) > 0
+    assert package_info["github_url"] == "https://github.com/pytest-dev/pytest"
+
+    # Test with a non-existent package
+    package_info = search_package("non_existent_package_12345")
+    assert package_info == {}
+
+def test_find_and_sort():
+    # Test with a valid query key
+    packages = find_and_sort("pytest")
+    print(packages)
+    assert isinstance(packages, list)
+    assert len(packages) > 0
+
+    # Test with an invalid query key
+    packages = find_and_sort("non_existent_package_12345")
+    assert isinstance(packages, list)
+    assert len(packages) == 0
 
 if __name__ == "__main__":
     pytest.main(["-v", __file__])

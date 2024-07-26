@@ -1,15 +1,13 @@
 """Synchronizes requirements and hatch pyproject."""
 
 import logging
-import os
 import subprocess
 import sys
 from pathlib import Path
 import tomlkit
 import click
 import requests
-import tomlkit
-
+import xmlrpc.client
 
 def get_latest_version(package_name):
     """Gets the latest version of the specified package from PyPI.
@@ -32,6 +30,158 @@ def get_latest_version(package_name):
     except Exception:
         pass
     return None
+
+
+def get_package_names(query_key):
+    """Fetch package names from PyPI search results."""
+    search_url = f"https://pypi.org/search/?q={query_key}"
+    response = requests.get(search_url)
+    response.raise_for_status()
+    page_content = response.text
+    
+    # Extract package names from search results
+    start_token = '<a class="package-snippet"'
+    end_token = '</a>'
+    name_token = '<span class="package-snippet__name">'
+    
+    package_names = []
+    start = 0
+    while True:
+        start = page_content.find(start_token, start)
+        if start == -1:
+            break
+        end = page_content.find(end_token, start)
+        snippet = page_content[start:end]
+        name_start = snippet.find(name_token)
+        if name_start != -1:
+            name_start += len(name_token)
+            name_end = snippet.find('</span>', name_start)
+            package_name = snippet[name_start:name_end]
+            package_names.append(package_name)
+        start = end
+    
+    return package_names
+
+def get_package_info(package_name):
+    """Retrieve detailed package information from PyPI JSON API."""
+    package_url = f"https://pypi.org/pypi/{package_name}/json"
+    response = requests.get(package_url)
+    response.raise_for_status()
+    package_data = response.json()
+    
+    info = package_data.get("info", {})
+    downloads = package_data.get("downloads", {}).get("last_month", 0)
+    
+    package_info = {
+        "name": info.get("name", ""),
+        "version": info.get("version", ""),
+        "summary": info.get("summary", ""),
+        "downloads": downloads
+    }
+    
+    return package_info
+
+def find_and_sort(query_key, sort_key="downloads") -> list:
+    """Find and sort potential packages by a specified key.
+
+    Args:
+        query_key (str): The key to query for.
+        sort_key (str): The key to sort by. Defaults to "downloads".
+        
+    Returns:
+        list: List of packages sorted by the specified key.
+    """
+    try:
+        package_names = get_package_names(query_key)
+        packages = []
+        for package_name in package_names:
+            package_info = get_package_info(package_name)
+            packages.append(package_info)
+        
+        # Sort the packages by the specified key
+        sorted_packages = sorted(packages, key=lambda x: x.get(sort_key, 0), reverse=True)
+        return sorted_packages
+    
+    except requests.RequestException as e:
+        print(f"HTTP error occurred: {e}")
+        return []
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return []
+
+def search_package(package_name):
+    """Search for a package on PyPI and return the description, details, and GitHub URL if available.
+
+    Args:
+        package_name (str): The name of the package to search for.
+    
+    Returns:
+        dict: The package information.
+    """
+    package_info = {}
+    try:
+        response = requests.get(f"https://pypi.org/pypi/{package_name}/json")
+        response.raise_for_status()  # Raises stored HTTPError, if one occurred.
+        data = response.json()
+        info = data.get("info", {})
+        
+        package_info["description"] = info.get("summary", "")
+        package_info["details"] = info.get("description", "")
+        
+        # Get GitHub URL if available
+        project_urls = info.get("project_urls", {})
+        package_info["github_url"] = next(
+            (url for name, url in project_urls.items() if "github.com" in url.lower()), None
+        )
+    except requests.RequestException as e:
+        print(f"HTTP error occurred: {e}")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+    
+    return package_info
+
+
+
+def find_and_sort(query_key, sort_key="downloads") -> list:
+    """Find and sort potential packages by a specified key.
+
+    Args:
+        query_key (str): The key to query for.
+        sort_key (str): The key to sort by. Defaults to "downloads".
+        
+    Returns:
+        list: List of packages sorted by the specified key.
+    """
+    try:
+        client = xmlrpc.client.ServerProxy('https://pypi.org/pypi')
+        
+        # Perform search
+        search_results = client.search({'name': query_key}, 'or')
+        
+        # Extract and process relevant package info
+        packages = []
+        for result in search_results:
+            package_info = {
+                "name": result.get("name"),
+                "version": result.get("version"),
+                "summary": result.get("summary", ""),
+                "downloads": result.get("downloads", {}).get("last_month", 0)
+            }
+            packages.append(package_info)
+        
+        # Sort the packages by the specified key
+        sorted_packages = sorted(packages, key=lambda x: x.get(sort_key, 0), reverse=True)
+        return sorted_packages
+    
+    except xmlrpc.client.ProtocolError as e:
+        print(f"Protocol error occurred: {e.errcode} - {e.errmsg}")
+        return []
+    except xmlrpc.client.Fault as e:
+        print(f"A fault occurred: {e.faultCode} - {e.faultString}")
+        return []
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return []
 
 
 def modify_requirements(package_name, package_version=None, action="install") -> None:
