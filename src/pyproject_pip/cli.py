@@ -6,13 +6,11 @@ from pyproject_pip.pypip import (
     name_and_version,
     find_and_sort,
     get_package_info,
-    base_name,
 )
 import subprocess
 import sys
 import tomlkit
 import click
-# from rich.pretty import pprint as print
 
 @click.group(invoke_without_command=True)
 @click.pass_context
@@ -57,13 +55,10 @@ def install_command(
         dependency_group (str, optional): The dependency group to use. Defaults to "dependencies".
     """
     try:
-        
-        initial_packages = get_requirements_packages()
-        print(initial_packages)
         if requirements:
             if not Path(requirements).exists():
-                click.echo(f"Error: The requirements file {requirements} does not exist.")
-                sys.exit(1)
+                click.echo(f"Requirements file {requirements} not found. Creating it.")
+                Path(requirements).touch()
             packages = get_requirements_packages(requirements)
 
 

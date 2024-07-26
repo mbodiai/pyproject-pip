@@ -16,7 +16,7 @@ pypip --help
 
 ## Table of Contents
 
-- [pyproject-pip](#pyproject-pip)
+- [pyproject-pip (WIP)](#pyproject-pip-wip)
   - [Table of Contents](#table-of-contents)
   - [Installation](#installation)
   - [Usage](#usage)
@@ -37,17 +37,13 @@ pypip --help
 ```
 Usage: pypip [OPTIONS] COMMAND [ARGS]...
 
-  Main CLI entry point. If no subcommand is provided, it shows the
-  dependencies.
-
-  Args:     ctx (click.Context): Click context object.     hatch_env (str,
-  optional): The Hatch environment to use. Defaults to "default".
-
 Options:
   -v, --hatch-env TEXT  Specify the Hatch environment to use
   --help                Show this message and exit.
 
 Commands:
+  find       Find a package on PyPI and optionally sort the results.
+  info       Get information about a package from PyPI.
   install    Install packages and update requirements.txt and...
   show       Show the dependencies from the pyproject.toml file.
   uninstall  Uninstall packages and update requirements.txt and...

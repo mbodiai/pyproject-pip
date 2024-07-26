@@ -194,7 +194,6 @@ def modify_requirements(package_name, package_version=None, action="install") ->
     Raises:
         FileNotFoundError: If the requirements.txt file does not exist when attempting to read.
     """
-    print("Modifying requirements.txt file: ", package_name, package_version, action)
     lines = get_requirements_packages(as_set=False)
 
     # Extract the base package name and optional extras
@@ -220,7 +219,6 @@ def modify_requirements(package_name, package_version=None, action="install") ->
 
     # Ensure each line ends with a newline character
     lines = [line + "\n" for line in lines]
-    print("writing lines: ", lines)
     with open("requirements.txt", "w") as f:
         f.writelines(lines)
 
