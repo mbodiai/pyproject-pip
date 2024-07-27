@@ -1,9 +1,9 @@
 import os
-from pathlib import Path
 import shutil
 import sys
-from typing import Literal
 from os import getcwd
+from pathlib import Path
+from typing import Literal
 
 WORKFLOW_UBUNTU ="""name: "Ubuntu"
 
@@ -139,7 +139,7 @@ def create_project(project_name, author,description="", deps: list[str] | Litera
 
         print(f"{file} already exists. Skipping...") # noqa
         continue
-      Path(project_root / file).touch(exist_ok=False)
+      Path(project_root / file).touch(exist_ok=True)
       Path(file).write_text(content)
 
     # Create __about__.py in project directory
@@ -158,8 +158,8 @@ def create_project(project_name, author,description="", deps: list[str] | Litera
         if should_overwrite.lower() != 'y':
             print("Won't overwrite workflows. Skipping...")
             return
-    Path(workflows / 'macos.yml').touch(exist_ok=False)
-    Path(workflows / 'ubuntu.yml').touch(exist_ok=False)
+    Path(workflows / 'macos.yml').touch(exist_ok=True)
+    Path(workflows / 'ubuntu.yml').touch(exist_ok=True)
     Path(workflows / 'macos.yml').write_text(WORKFLOW_MAC)
     Path(workflows / 'ubuntu.yml').write_text(WORKFLOW_UBUNTU)
 
@@ -169,7 +169,6 @@ def create_pyproject_toml(project_name, author, desc="", deps=None, python_versi
     authors = ",".join(['{' + f'name="{a}"' + '}' for a in author.split(",")])
     test_docs = "{tests,docs}"
     deps = ",\n     ".join([f'"{dep}"' for dep in deps]) if deps else ""
-    python_version = f'"{python_version}"' if not python_version.startswith('"') else python_version
     return f'''[build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -215,7 +214,7 @@ allow-direct-references = true
 "resources" = "{project_name}/resources"
 
 [tool.hatch.envs.default]
-python = {python_version}
+python = "{python_version}"
 path = ".{project_name}/envs/{project_name}"
 dependencies = [
 "pytest",
@@ -227,7 +226,7 @@ dependencies = [
 
 [tool.hatch.envs.conda]
 type = "conda"
-python = {python_version}
+python = "{python_version}"
 command = "conda"
 conda-forge = false
 environment-file = "environment.yml"
