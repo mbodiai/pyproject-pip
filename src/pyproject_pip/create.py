@@ -135,8 +135,12 @@ def create_project(project_name, author,description="", deps: list[str] | Litera
         ('pyproject.toml', create_pyproject_toml(project_name, author, deps)),
     ]
     for file, content in files:
-        Path(project_root / file).touch(exist_ok=False)
-        Path(file).write_text(content)
+      if Path(project_root / file).exists() and "y" not in input(f"{file} already exists. Overwrite? (y/n): "):
+        # Print in red and exit
+        print(f"{file} already exists. Exiting...")
+        sys.exit(0)
+      Path(project_root / file).touch(exist_ok=False)
+      Path(file).write_text(content)
 
     # Create __about__.py in project directory
     Path(project_root / '__about__.py').touch(exist_ok=True)
@@ -149,6 +153,11 @@ def create_project(project_name, author,description="", deps: list[str] | Litera
     # Create workflows directory
     workflows = root / '.github/workflows'
     workflows.mkdir(exist_ok=True, parents=True)
+    if Path(workflows / 'macos.yml').exists() or Path(workflows / 'ubuntu.yml').exists():
+        should_overwrite = input("Workflows already exist. Overwrite? (y/n): ")
+        if should_overwrite.lower() != 'y':
+            print("Won't overwrite workflows. Exiting...")
+            sys.exit(0)
     Path(workflows / 'macos.yml').touch(exist_ok=False)
     Path(workflows / 'ubuntu.yml').touch(exist_ok=False)
     Path(workflows / 'macos.yml').write_text(WORKFLOW_MAC)

@@ -471,11 +471,9 @@ def is_package_in_pyproject(package_name, hatch_env=None) -> bool:
 
 def create_pyproject_toml(project_name, author, desc="", deps=None, python_version="3.11"):
     """Create a pyproject.toml file for a Hatch project."""
-
     authors = ",".join(['{' + f'name="{a}"' + '}' for a in author.split(",")])
     test_docs = "{tests,docs}"
     deps = ",\n     ".join([f'"{dep}"' for dep in deps]) if deps else ""
-    python_version = f'"{python_version}"' if not python_version.startswith('"') else python_version
     return f'''[build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -485,7 +483,7 @@ name = "{project_name}"
 dynamic = ["version"]
 description = "{desc}"
 readme = "README.md"
-requires-python = {python_version}
+requires-python = ">={python_version}"
 license = "apache-2.0"
 keywords = []
 authors = [{authors}]
@@ -533,7 +531,7 @@ dependencies = [
 
 [tool.hatch.envs.conda]
 type = "conda"
-python = {python_version}
+python = "{python_version}"
 command = "conda"
 conda-forge = false
 environment-file = "environment.yml"
