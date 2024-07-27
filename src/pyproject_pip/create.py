@@ -135,10 +135,11 @@ def create_project(project_name, author,description="", deps: list[str] | Litera
         ('pyproject.toml', create_pyproject_toml(project_name, author, deps)),
     ]
     for file, content in files:
-      if Path(project_root / file).exists() and "y" not in input(f"{file} already exists. Overwrite? (y/n): "):
+      if Path(root / file).exists():
+        if "y" not in input(f"{file} already exists. Overwrite? (y/n): "):
         # Print in red and exit
-        print(f"{file} already exists. Exiting...")
-        sys.exit(0)
+        print(f"{file} already exists. Skipping...")
+        continue
       Path(project_root / file).touch(exist_ok=False)
       Path(file).write_text(content)
 
@@ -156,8 +157,8 @@ def create_project(project_name, author,description="", deps: list[str] | Litera
     if Path(workflows / 'macos.yml').exists() or Path(workflows / 'ubuntu.yml').exists():
         should_overwrite = input("Workflows already exist. Overwrite? (y/n): ")
         if should_overwrite.lower() != 'y':
-            print("Won't overwrite workflows. Exiting...")
-            sys.exit(0)
+            print("Won't overwrite workflows. Skipping...")
+            return
     Path(workflows / 'macos.yml').touch(exist_ok=False)
     Path(workflows / 'ubuntu.yml').touch(exist_ok=False)
     Path(workflows / 'macos.yml').write_text(WORKFLOW_MAC)
