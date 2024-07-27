@@ -259,48 +259,55 @@ def process_dependencies(line, output_lines):
     for line in lines:
         output_lines.append("  " + line.strip() if not line.strip().startswith("[") else line.strip())
 
-def write_pyproject(data):
-    with open("pyproject.toml", "w") as f:
-        toml_str = tomlkit.dumps(data)
-        inside_dependencies = False
-        inside_optional_dependencies = False
+def write_pyproject(data, filename="pyproject.toml"):
+    """Write the modified pyproject.toml data back to the file."""
+    original_data = Path(filename).read_text()
+    try:
+        with Path(filename).open("w") as f:
+            toml_str = tomlkit.dumps(data)
+            inside_dependencies = False
+            inside_optional_dependencies = False
 
-        input_lines = toml_str.splitlines()
-        output_lines = []
-        for input_line in input_lines:
-            line = input_line.rstrip()
-            if is_group(line):
-                inside_dependencies = False
-                inside_optional_dependencies = "optional-dependencies" in line
-                output_lines.append(line)
-                continue
+            input_lines = toml_str.splitlines()
+            output_lines = []
+            for input_line in input_lines:
+                line = input_line.rstrip()
+                if is_group(line):
+                    inside_dependencies = False
+                    inside_optional_dependencies = "optional-dependencies" in line
+                    output_lines.append(line)
+                    continue
 
-            if "]" in line and inside_dependencies and "[" not in line:
-                inside_dependencies = False
+                if "]" in line and inside_dependencies and "[" not in line:
+                    inside_dependencies = False
 
-            if inside_optional_dependencies:
-                process_dependencies(line, output_lines)
-    
-            if "dependencies" in line and "optional-dependencies" not in line and "extra-dependencies" not in line and not inside_optional_dependencies:
-                inside_dependencies = True
-                inside_optional_dependencies = False
-                output_lines.append(line[:line.index("[") + 1])
-                line = line[line.index("[") + 1:]
+                if inside_optional_dependencies:
+                    process_dependencies(line, output_lines)
+        
+                if "dependencies" in line and "optional-dependencies" not in line and "extra-dependencies" not in line and not inside_optional_dependencies:
+                    inside_dependencies = True
+                    inside_optional_dependencies = False
+                    output_lines.append(line[:line.index("[") + 1])
+                    line = line[line.index("[") + 1:]
 
-            if inside_dependencies and not inside_optional_dependencies:
-                inside_optional_dependencies = False
-                process_dependencies(line, output_lines)
+                if inside_dependencies and not inside_optional_dependencies:
+                    inside_optional_dependencies = False
+                    process_dependencies(line, output_lines)
 
-            elif not inside_dependencies and not inside_optional_dependencies:
-                output_lines.append(line)
+                elif not inside_dependencies and not inside_optional_dependencies:
+                    output_lines.append(line)
 
-        written = []
-        for line in output_lines:
-            if is_group(line) and written and not written[-1].endswith("\n"):
-                f.write("\n")
-                written.append("\n")
-            written.append(line + "\n")
-            f.write(line + "\n")
+            written = []
+            for line in output_lines:
+                if is_group(line) and written and not written[-1].endswith("\n"):
+                    f.write("\n")
+                    written.append("\n")
+                written.append(line + "\n")
+                f.write(line + "\n")
+    except Exception as e:
+        print(f"An error occurred while writing to {filename}: {e}")
+        with Path(filename).open("w") as f:
+            f.write(original_data)
 
 def base_name(package_name):
     """Extract the base package name from a package name with optional extras.
@@ -354,6 +361,22 @@ def modify_pyproject_toml(
         hatch_env (str, optional): The Hatch environment to use. Defaults to "default".
         dependency_group (str, optional): The group of dependencies to modify. Defaults to "dependencies".
     """
+    pyproject_path = Path("pyproject.toml")
+    if not pyproject_path.exists():
+        action = input("pyproject.toml not found. Do you want to create it? (y/n): ").lower()
+        if "y" in action.lower():
+            create_pyproject_toml()
+        elif "n" in action.lower() and "y" in input("Check parent dirs? (y/n): ").lower():
+            for _ in range(3):
+                if pyproject_path.exists():
+                    break
+                pyproject_path = Path("../pyproject.toml")
+
+            if not pyproject_path.exists():
+                print("\033pyproject.toml not found in parent directories.\033[0m")
+                sys.exit(1)
+   
+
     with open("pyproject.toml") as f:
         content = f.read()
         pyproject = tomlkit.parse(content)
@@ -444,3 +467,138 @@ def is_package_in_pyproject(package_name, hatch_env=None) -> bool:
     else:
         dependencies = pyproject.get("dependencies", [])
     return any(package_name in dep for dep in dependencies)
+
+def create_pyproject_toml(project_name, author, desc="", deps=None, python_version="3.11"):
+    """Create a pyproject.toml file for a Hatch project."""
+
+    authors = ",".join(['{' + f'name="{a}"' + '}' for a in author.split(",")])
+    test_docs = "{tests,docs}"
+    deps = ",\n     ".join([f'"{dep}"' for dep in deps]) if deps else ""
+    python_version = f'"{python_version}"' if not python_version.startswith('"') else python_version
+    return f'''[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "{project_name}"
+dynamic = ["version"]
+description = "{desc}"
+readme = "README.md"
+requires-python = {python_version}
+license = "apache-2.0"
+keywords = []
+authors = [{authors}]
+classifiers = [
+"Development Status :: 4 - Beta",
+"Programming Language :: Python",
+"Programming Language :: Python :: {python_version}",
+"Programming Language :: Python :: Implementation :: CPython",
+"Programming Language :: Python :: Implementation :: PyPy",
+]
+
+dependencies = [
+    {deps}
+]
+
+[project.optional-dependencies]
+
+
+[project.urls]
+Documentation = "https://github.com/{author}/{project_name}#readme"
+Issues = "https://github.com/{author}/{project_name}/issues"
+Source = "https://github.com/{author}/{project_name}"
+
+[project.scripts]
+
+[tool.hatch.version]
+path = "{project_name}/__about__.py"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel.force-include]
+"resources" = "{project_name}/resources"
+
+[tool.hatch.envs.default]
+python = {python_version}
+path = ".{project_name}/envs/{project_name}"
+dependencies = [
+"pytest",
+"pytest-mock",
+"pytest-asyncio",
+]
+
+[tool.hatch.envs.default.env-vars]
+
+[tool.hatch.envs.conda]
+type = "conda"
+python = {python_version}
+command = "conda"
+conda-forge = false
+environment-file = "environment.yml"
+prefix = ".venv/"
+
+[tool.hatch.envs.default.scripts]
+test = "pytest -vv --ignore third_party {{args:tests}}"
+test-cov = "coverage run -m pytest {{args:tests}}"
+cov-report = ["- coverage combine", "coverage report"]
+cov = ["test-cov", "cov-report"]
+
+[[tool.hatch.envs.all.matrix]]
+python = ["3.10", "3.11", "3.12"]
+
+[tool.hatch.envs.types]
+dependencies = [
+"mypy>=1.0.0"
+]
+[tool.hatch.envs.types.scripts]
+check = "mypy --install-types --non-interactive {{args:{project_name}/ tests}}"
+
+[tool.coverage.run]
+source_pkgs = ["{project_name}", "tests"]
+branch = true
+parallel = true
+omit = ["{project_name}/__about__.py"]
+
+[tool.coverage.paths]
+{project_name} = ["{project_name}/"]
+tests = ["tests"]
+
+[tool.coverage.report]
+exclude_lines = ["no cov", "if __name__ == .__main__.:", "if TYPE_CHECKING:"]
+
+[tool.ruff]
+line-length = 120
+indent-width = 4
+target-version = "py310"
+
+[tool.ruff.lint]
+extend-unsafe-fixes = ["ALL"]
+select = [
+"A", "COM812", "C4", "D", "E", "F", "UP", "B", "SIM", "ISC", "N", "ANN", "ASYNC",
+"S", "T20", "RET", "SIM", "ARG", "PTH", "ERA", "PD", "I", "PLW",
+]
+ignore = [
+"D100", "D101", "D104", "D106", "ANN101", "ANN102", "ANN003", "UP009", "ANN204",
+"B026", "ANN001", "ANN401", "ANN202", "D107", "D102", "D103", "E731", "UP006",
+"UP035", "ANN002",
+]
+fixable = ["ALL"]
+unfixable = []
+
+[tool.ruff.format]
+docstring-code-format = true
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"**/{test_docs}/*" = ["ALL"]
+"**__init__.py" = ["F401"]
+'''
+
+

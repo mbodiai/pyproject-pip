@@ -7,6 +7,7 @@ from pyproject_pip.pypip import (
     find_and_sort,
     get_package_info,
 )
+from pyproject_pip.create import create_project
 import subprocess
 import sys
 import tomlkit
@@ -212,5 +213,28 @@ def info_command(package, verbose) -> None:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
 
+@cli.command("create")
+@click.argument("project_name")
+@click.argument("author")
+@click.option("--description", default="", help="Project description")
+@click.option("--deps", default=None, help="Dependencies separated by commas")
+def create_command(project_name, author, description, deps) -> None:
+    """Create a new Python project.
+
+    Args:
+        project_name (str): The name of the project.
+        author (str): The author of the project.
+        description (str, optional): The description of the project. Defaults to "".
+        deps (str, optional): Dependencies separated by commas. Defaults to None.
+    """
+    try:
+        if deps:
+            deps = deps.split(",")
+        create_project(project_name, author, description, deps)
+        click.echo(f"Project {project_name} created successfully.")
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+    
 if __name__ == "__main__":
     cli()
