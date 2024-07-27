@@ -5,6 +5,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from pyproject_pip.create import create_project
 import markdown2
 import tomlkit
 import requests
@@ -365,7 +366,7 @@ def modify_pyproject_toml(
     if not pyproject_path.exists():
         action = input("pyproject.toml not found. Do you want to create it? (y/n): ").lower()
         if "y" in action.lower():
-            create_pyproject_toml()
+            create_project(input("Enter project name: "), input("Enter author name: "), input("Enter project description: "))
         elif "n" in action.lower() and "y" in input("Check parent dirs? (y/n): ").lower():
             for _ in range(3):
                 if pyproject_path.exists():

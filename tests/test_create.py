@@ -22,13 +22,13 @@ def test_create_project(mock_cwd):
         create_project(project_name, author, description, deps)
 
         # Check if directories were created
-        assert mock_mkdir.call_count == 7  # 5 dirs + 1 for tests
+        assert mock_mkdir.call_count == 8  # 5 dirs + 1 for tests
         mock_mkdir.assert_has_calls([
             call(exist_ok=True) for _ in range(7)
         ], any_order=True)
 
         # Check if files were created with correct content
-        assert mock_write_text.call_count == 4  # LICENSE, README.md, pyproject.toml, __about__.py
+        assert mock_write_text.call_count == 6  # LICENSE, README.md, pyproject.toml, __about__.py
         mock_write_text.assert_has_calls([
             call(''),  # LICENSE
             call(f'# {project_name}\n\n{description}\n\n## Installation\n\n```bash\npip install {project_name}\n```\n'),  # README.md
@@ -37,7 +37,7 @@ def test_create_project(mock_cwd):
         ], any_order=True)
 
         # Check if __init__.py was touched
-        assert mock_touch.call_count == 5
+        assert mock_touch.call_count == 7
 
         # Check if create_pyproject_toml was called with correct arguments
         mock_create_pyproject.assert_called_once_with(project_name, author, deps)
