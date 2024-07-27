@@ -135,10 +135,9 @@ def create_project(project_name, author,description="", deps: list[str] | Litera
         ('pyproject.toml', create_pyproject_toml(project_name, author, deps)),
     ]
     for file, content in files:
-      if Path(root / file).exists():
-        if "y" not in input(f"{file} already exists. Overwrite? (y/n): "):
-        # Print in red and exit
-        print(f"{file} already exists. Skipping...")
+      if Path(root / file).exists() and "y" not in input(f"{file} already exists. Overwrite? (y/n): "):
+
+        print(f"{file} already exists. Skipping...") # noqa
         continue
       Path(project_root / file).touch(exist_ok=False)
       Path(file).write_text(content)
@@ -167,7 +166,6 @@ def create_project(project_name, author,description="", deps: list[str] | Litera
 
 def create_pyproject_toml(project_name, author, desc="", deps=None, python_version="3.11"):
     """Create a pyproject.toml file for a Hatch project."""
-
     authors = ",".join(['{' + f'name="{a}"' + '}' for a in author.split(",")])
     test_docs = "{tests,docs}"
     deps = ",\n     ".join([f'"{dep}"' for dep in deps]) if deps else ""
@@ -181,7 +179,7 @@ name = "{project_name}"
 dynamic = ["version"]
 description = "{desc}"
 readme = "README.md"
-requires-python = {python_version}
+requires-python = ">={python_version}"
 license = "apache-2.0"
 keywords = []
 authors = [{authors}]
