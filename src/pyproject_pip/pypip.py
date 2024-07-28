@@ -298,12 +298,16 @@ def write_pyproject(data, filename="pyproject.toml"):
                 elif not inside_dependencies and not inside_optional_dependencies:
                     output_lines.append(line)
 
-            written = []
             for line in output_lines:
-                if is_group(line) and written and not written[-1].endswith("\n"):
-                    f.write("\n")
-                    written.append("\n")
-                written.append(line + "\n")
+                line: str = line.strip()
+                line = line.removesuffix(",") if line.endswith("],") else line
+                chunks = line.split("==")
+                if len(chunks) > 2:
+                    line = "==".join(chunks[:2])
+                    if not line.endswith("\","):
+                        line += "\","
+                    
+
                 f.write(line + "\n")
     except Exception as e:
         print(f"An error occurred while writing to {filename}: {e}")
