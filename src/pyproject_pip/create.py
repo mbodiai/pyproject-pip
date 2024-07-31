@@ -5,6 +5,7 @@ from os import getcwd
 from pathlib import Path
 from typing import Literal
 
+
 WORKFLOW_UBUNTU ="""name: "Ubuntu"
 
 on:
@@ -118,7 +119,7 @@ jobs:
           hatch run test"""
 
 
-def create_project(project_name, author,description="", deps: list[str] | Literal["local"] | None = None):
+def create_project(project_name, author,description="", deps: list[str] | Literal["local"] | None = None, python_version="3.11"):
     # Create project root directory
     root = Path(getcwd()) 
     project_root = root / project_name
@@ -128,11 +129,27 @@ def create_project(project_name, author,description="", deps: list[str] | Litera
     for dir in dirs:
         Path(root / dir).mkdir(exist_ok=True)
 
-    # Create files in root
+
+        # Create __about__.py in project directory
+    Path(project_root / '__about__.py').touch(exist_ok=True)
+       # Create __init__.py in project directory
+    add_cli = True
+    if not Path(project_root / '__init__.py').exists() and not Path(project_root / 'main.py').exists():
+      Path(project_root / '__init__.py').write_text("from .main import cli\n\n__all__ = ['cli']")
+      Path(project_root / 'main.py').write_text("from click import command\n\n@command()\ndef cli() -> None:\n    pass\n\nif __name__ == '__main__':\n    cli()")
+      add_cli = False
+    else:
+      Path(project_root / '__init__.py').touch(exist_ok=True)
+      
+    if not Path(project_root / '__about__.py').exists():
+      Path(project_root / '__about__.py').write_text('__version__ = "0.0.1"')
+
+        # Create files in root
     files = [
         ('LICENSE', ''),
         ('README.md', f'# {project_name}\n\n{description}\n\n## Installation\n\n```bash\npip install {project_name}\n```\n'),
-        ('pyproject.toml', create_pyproject_toml(project_name, author, deps)),
+        ('pyproject.toml', create_pyproject_toml(project_name, author, deps, python_version=python_version, add_cli=add_cli)),
+        ('requirements.txt', 'click' if add_cli else ''),
     ]
     for file, content in files:
       if Path(root / file).exists() and "y" not in input(f"{file} already exists. Overwrite? (y/n): "):
@@ -142,12 +159,9 @@ def create_project(project_name, author,description="", deps: list[str] | Litera
       Path(project_root / file).touch(exist_ok=True)
       Path(file).write_text(content)
 
-    # Create __about__.py in project directory
-    Path(project_root / '__about__.py').touch(exist_ok=True)
-    Path(project_root / '__about__.py').write_text('__version__ = "0.1.0"')
 
-    # Create __init__.py in project directory
-    Path(project_root / '__init__.py').touch(exist_ok=True)
+
+ 
     Path('tests').mkdir(exist_ok=True)
 
     # Create workflows directory
@@ -164,11 +178,13 @@ def create_project(project_name, author,description="", deps: list[str] | Litera
     Path(workflows / 'ubuntu.yml').write_text(WORKFLOW_UBUNTU)
 
 
-def create_pyproject_toml(project_name, author, desc="", deps=None, python_version="3.11"):
+def create_pyproject_toml(project_name, author, desc="", deps=None, python_version="3.11", add_cli=True):
     """Create a pyproject.toml file for a Hatch project."""
     authors = ",".join(['{' + f'name="{a}"' + '}' for a in author.split(",")])
     test_docs = "{tests,docs}"
     deps = ",\n     ".join([f'"{dep}"' for dep in deps]) if deps else ""
+    version_str = f"py{python_version.replace('.', '')}"
+    cli_str = f"{project_name} ={project_name}:cli" if add_cli else ""
     return f'''[build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -203,6 +219,7 @@ Issues = "https://github.com/{author}/{project_name}/issues"
 Source = "https://github.com/{author}/{project_name}"
 
 [project.scripts]
+{cli_str}
 
 [tool.hatch.version]
 path = "{project_name}/__about__.py"
@@ -264,7 +281,7 @@ exclude_lines = ["no cov", "if __name__ == .__main__.:", "if TYPE_CHECKING:"]
 [tool.ruff]
 line-length = 120
 indent-width = 4
-target-version = "py310"
+target-version = "{version_str}"
 
 [tool.ruff.lint]
 extend-unsafe-fixes = ["ALL"]
