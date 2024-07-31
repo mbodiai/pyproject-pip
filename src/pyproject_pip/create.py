@@ -1,12 +1,8 @@
-import os
-import shutil
-import sys
 from os import getcwd
 from pathlib import Path
 from typing import Literal
 
-
-WORKFLOW_UBUNTU ="""name: "Ubuntu"
+WORKFLOW_UBUNTU = """name: "Ubuntu"
 
 on:
   push:
@@ -119,73 +115,98 @@ jobs:
           hatch run test"""
 
 
-def create_project(project_name, author,description="", deps: list[str] | Literal["local"] | None = None, python_version="3.11"):
+def create_project(
+    project_name,
+    author,
+    description="",
+    deps: list[str] | Literal["local"] | None = None,
+    python_version="3.11",
+) -> None:
     # Create project root directory
-    root = Path(getcwd()) 
+    root = Path(getcwd())
     project_root = root / project_name
     Path(project_root).mkdir(exist_ok=True)
     # Create main directories
-    dirs = ['assets', 'docs', 'examples', 'resources', 'tests']
+    dirs = ["assets", "docs", "examples", "resources", "tests"]
     for dir in dirs:
         Path(root / dir).mkdir(exist_ok=True)
 
-
         # Create __about__.py in project directory
-    Path(project_root / '__about__.py').touch(exist_ok=True)
-       # Create __init__.py in project directory
+    Path(project_root / "__about__.py").touch(exist_ok=True)
+    # Create __init__.py in project directory
     add_cli = True
-    if not Path(project_root / '__init__.py').exists() and not Path(project_root / 'main.py').exists():
-      Path(project_root / '__init__.py').write_text("from .main import cli\n\n__all__ = ['cli']")
-      Path(project_root / 'main.py').write_text("from click import command\n\n@command()\ndef cli() -> None:\n    pass\n\nif __name__ == '__main__':\n    cli()")
-      add_cli = False
+    if not Path(project_root / "__init__.py").exists() and not Path(project_root / "main.py").exists():
+        Path(project_root / "__init__.py").write_text(
+            "from .main import cli\n\n__all__ = ['cli']",
+        )
+        Path(project_root / "main.py").write_text(
+            "from click import command\n\n@command()\ndef cli() -> None:\n    pass\n\nif __name__ == '__main__':\n    cli()",
+        )
+        add_cli = False
     else:
-      Path(project_root / '__init__.py').touch(exist_ok=True)
-      
-    if not Path(project_root / '__about__.py').exists():
-      Path(project_root / '__about__.py').write_text('__version__ = "0.0.1"')
+        Path(project_root / "__init__.py").touch(exist_ok=True)
+
+    if not Path(project_root / "__about__.py").exists():
+        Path(project_root / "__about__.py").write_text('__version__ = "0.0.1"')
 
         # Create files in root
     files = [
-        ('LICENSE', ''),
-        ('README.md', f'# {project_name}\n\n{description}\n\n## Installation\n\n```bash\npip install {project_name}\n```\n'),
-        ('pyproject.toml', create_pyproject_toml(project_name, author, deps, python_version=python_version, add_cli=add_cli)),
-        ('requirements.txt', 'click' if add_cli else ''),
+        ("LICENSE", ""),
+        (
+            "README.md",
+            f"# {project_name}\n\n{description}\n\n## Installation\n\n```bash\npip install {project_name}\n```\n",
+        ),
+        (
+            "pyproject.toml",
+            create_pyproject_toml(
+                project_name,
+                author,
+                deps,
+                python_version=python_version,
+                add_cli=add_cli,
+            ),
+        ),
+        ("requirements.txt", "click" if add_cli else ""),
     ]
     for file, content in files:
-      if Path(root / file).exists() and "y" not in input(f"{file} already exists. Overwrite? (y/n): "):
+        if Path(root / file).exists() and "y" not in input(
+            f"{file} already exists. Overwrite? (y/n): ",
+        ):
+            print(f"{file} already exists. Skipping...")  # noqa
+            continue
+        Path(project_root / file).touch(exist_ok=True)
+        Path(file).write_text(content)
 
-        print(f"{file} already exists. Skipping...") # noqa
-        continue
-      Path(project_root / file).touch(exist_ok=True)
-      Path(file).write_text(content)
-
-
-
- 
-    Path('tests').mkdir(exist_ok=True)
+    Path("tests").mkdir(exist_ok=True)
 
     # Create workflows directory
-    workflows = root / '.github/workflows'
+    workflows = root / ".github/workflows"
     workflows.mkdir(exist_ok=True, parents=True)
-    if Path(workflows / 'macos.yml').exists() or Path(workflows / 'ubuntu.yml').exists():
+    if Path(workflows / "macos.yml").exists() or Path(workflows / "ubuntu.yml").exists():
         should_overwrite = input("Workflows already exist. Overwrite? (y/n): ")
-        if should_overwrite.lower() != 'y':
-            print("Won't overwrite workflows. Skipping...")
+        if should_overwrite.lower() != "y":
             return
-    Path(workflows / 'macos.yml').touch(exist_ok=True)
-    Path(workflows / 'ubuntu.yml').touch(exist_ok=True)
-    Path(workflows / 'macos.yml').write_text(WORKFLOW_MAC)
-    Path(workflows / 'ubuntu.yml').write_text(WORKFLOW_UBUNTU)
+    Path(workflows / "macos.yml").touch(exist_ok=True)
+    Path(workflows / "ubuntu.yml").touch(exist_ok=True)
+    Path(workflows / "macos.yml").write_text(WORKFLOW_MAC)
+    Path(workflows / "ubuntu.yml").write_text(WORKFLOW_UBUNTU)
 
 
-def create_pyproject_toml(project_name, author, desc="", deps=None, python_version="3.11", add_cli=True):
+def create_pyproject_toml(
+    project_name,
+    author,
+    desc="",
+    deps=None,
+    python_version="3.11",
+    add_cli=True,
+) -> str:
     """Create a pyproject.toml file for a Hatch project."""
-    authors = ",".join(['{' + f'name="{a}"' + '}' for a in author.split(",")])
+    authors = ",".join(["{" + f'name="{a}"' + "}" for a in author.split(",")])
     test_docs = "{tests,docs}"
     deps = ",\n     ".join([f'"{dep}"' for dep in deps]) if deps else ""
     version_str = f"py{python_version.replace('.', '')}"
     cli_str = f"{project_name} ={project_name}:cli" if add_cli else ""
-    return f'''[build-system]
+    return f"""[build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
@@ -286,13 +307,13 @@ target-version = "{version_str}"
 [tool.ruff.lint]
 extend-unsafe-fixes = ["ALL"]
 select = [
-"A", "COM812", "C4", "D", "E", "F", "UP", "B", "SIM", "ISC", "N", "ANN", "ASYNC",
+"A", "C4", "D", "E", "F", "UP", "B", "SIM", "N", "ANN", "ASYNC",
 "S", "T20", "RET", "SIM", "ARG", "PTH", "ERA", "PD", "I", "PLW",
 ]
 ignore = [
 "D100", "D101", "D104", "D106", "ANN101", "ANN102", "ANN003", "UP009", "ANN204",
 "B026", "ANN001", "ANN401", "ANN202", "D107", "D102", "D103", "E731", "UP006",
-"UP035", "ANN002",
+"UP035", "ANN002", "PLW2901"
 ]
 fixable = ["ALL"]
 unfixable = []
@@ -310,13 +331,12 @@ convention = "google"
 [tool.ruff.lint.per-file-ignores]
 "**/{test_docs}/*" = ["ALL"]
 "**__init__.py" = ["F401"]
-'''
-
+"""
 
 
 if __name__ == "__main__":
     project_name = input("Enter project name: ")
     author = input("Enter author name: ")
     description = input("Enter project description: ")
-    deps = input("Enter dependencies separated by commas: ").split(',')
-    create_project(project_name, author, description, deps)
+    deps = input("Enter dependencies separated by commas: ").split(",")
+    create_project(project_name, author, description, deps, add_cli=True)

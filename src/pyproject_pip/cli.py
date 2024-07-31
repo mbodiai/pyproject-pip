@@ -1,22 +1,28 @@
-from pathlib import Path
-from pyproject_pip.pypip import (
-    get_requirements_packages,
-    modify_requirements,
-    modify_pyproject_toml,
-    name_and_version,
-    find_and_sort,
-    get_package_info,
-)
-from pyproject_pip.create import create_project
 import subprocess
 import sys
-import tomlkit
-import click
+from pathlib import Path
 
+import click
+import tomlkit
+
+from pyproject_pip.create import create_project
+from pyproject_pip.pypip import (
+    find_and_sort,
+    get_package_info,
+    get_requirements_packages,
+    modify_pyproject_toml,
+    modify_requirements,
+    name_and_version,
+)
+
+from mdstream import MarkdownStream
 @click.group(invoke_without_command=True)
 @click.pass_context
 @click.option(
-    "-v", "--hatch-env", default=None, help="Specify the Hatch environment to use"
+    "-v",
+    "--hatch-env",
+    default=None,
+    help="Specify the Hatch environment to use",
 )
 def cli(ctx, hatch_env) -> None:
     if ctx.invoked_subcommand is None:
@@ -33,7 +39,10 @@ def cli(ctx, hatch_env) -> None:
 )
 @click.option("-U", "--upgrade", is_flag=True, help="Upgrade the package(s)")
 @click.option(
-    "-e", "--editable", is_flag=True, help="Install a package in editable mode"
+    "-e",
+    "--editable",
+    is_flag=True,
+    help="Install a package in editable mode",
 )
 @click.option("--hatch-env", default=None, help="Specify the Hatch environment to use")
 @click.option(
@@ -43,7 +52,12 @@ def cli(ctx, hatch_env) -> None:
     help="Specify the dependency group to use",
 )
 def install_command(
-    packages, requirements, upgrade, editable, hatch_env, dependency_group
+    packages,
+    requirements,
+    upgrade,
+    editable,
+    hatch_env,
+    dependency_group,
 ) -> None:
     """Install packages and update requirements.txt and pyproject.toml accordingly.
 
@@ -61,8 +75,6 @@ def install_command(
                 click.echo(f"Requirements file {requirements} not found. Creating it.")
                 Path(requirements).touch()
             packages = get_requirements_packages(requirements)
-
-
 
         for package in packages:
             package_install_cmd = [sys.executable, "-m", "pip", "install"]
@@ -104,13 +116,14 @@ def uninstall_command(packages, hatch_env, dependency_group) -> None:
     Args:
         packages (tuple): Packages to uninstall.
         hatch_env (str, optional): The Hatch environment to use. Defaults to "default".
+        dependency_group (str, optional): The dependency group to use. Defaults to "dependencies".
     """
     for package in packages:
         package_name = package.split("==")[0].split("[")[0]  # Handle extras
 
         try:
             subprocess.check_call(
-                [sys.executable, "-m", "pip", "uninstall", package_name, "-y"]
+                [sys.executable, "-m", "pip", "uninstall", package_name, "-y"],
             )
             modify_requirements(package_name, action="uninstall")
             modify_pyproject_toml(
@@ -147,17 +160,9 @@ def show_command(hatch_env) -> None:
             pyproject = tomlkit.parse(content)
 
         # Determine if we are using Hatch or defaulting to project dependencies
-        if (
-            "tool" in pyproject
-            and "hatch" in pyproject["tool"]
-            and hatch_env is not None
-        ):
+        if "tool" in pyproject and "hatch" in pyproject["tool"] and hatch_env is not None:
             dependencies = (
-                pyproject.get("tool", {})
-                .get("hatch", {})
-                .get("envs", {})
-                .get(hatch_env, {})
-                .get("dependencies", [])
+                pyproject.get("tool", {}).get("hatch", {}).get("envs", {}).get(hatch_env, {}).get("dependencies", [])
             )
         else:
             dependencies = pyproject.get("project", {}).get("dependencies", [])
@@ -172,6 +177,7 @@ def show_command(hatch_env) -> None:
     finally:
         sys.exit(0)
 
+
 @cli.command("find")
 @click.argument("package")
 @click.option("--limit", default=5, help="Limit the number of results")
@@ -185,11 +191,19 @@ def find_command(package, limit, sort) -> None:
     """
     try:
         packages = find_and_sort(package, limit, sort)
-        click.echo("Packages found:")
-        print(packages)
+        md = MarkdownStream()
+        md.update("# Packages found:")
+        for p in packages:
+            md.update(f"## {p['name']}")
+            md.update(f"**Version:** {p['version']}")
+            md.update(f"**Downloads:** {p['downloads']}")
+            md.update(f"**Summary:** {p['summary']}")
+            md.update(f"**URL:** {p['url']}")
+            md.update("---")
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
+
 
 @cli.command("info")
 @click.argument("package")
@@ -202,23 +216,31 @@ def info_command(package, verbose) -> None:
     """
     try:
         package_info = get_package_info(package, verbose)
-        click.echo("Package info:")
-        click.echo(package_info)
-        description = package_info.pop("description", " ")
+        md = MarkdownStream()
+        md.update(f"# {package_info['name']}")
+        md.update(f"**Version:** {package_info['version']}")
+        md.update(f"**Downloads:** {package_info['downloads']}")
+        md.update(f"**URL:** {package_info['url']}")
+        md.update(f"**Summary:** {package_info['summary']}")
+        md.update("---")
         if verbose:
-            for line in description.split("\n"):
-                click.echo(line)
-        
+            md.update(f"**Description:** {package_info['description']}")
+            
+
+
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
+
 
 @cli.command("create")
 @click.argument("project_name")
 @click.argument("author")
 @click.option("--description", default="", help="Project description")
 @click.option("--deps", default=None, help="Dependencies separated by commas")
-def create_command(project_name, author, description, deps) -> None:
+@click.option("--python-version", default="3.11", help="Python version to use")
+@click.option("--no-cli", is_flag=True, help="Do not add a CLI")
+def create_command(project_name, author, description, deps, python_version="3.11", add_cli=True) -> None:
     """Create a new Python project.
 
     Args:
@@ -230,11 +252,12 @@ def create_command(project_name, author, description, deps) -> None:
     try:
         if deps:
             deps = deps.split(",")
-        create_project(project_name, author, description, deps)
+        create_project(project_name, author, description, deps, python_version, add_cli)
         click.echo(f"Project {project_name} created successfully.")
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
-    
+
+
 if __name__ == "__main__":
     cli()
