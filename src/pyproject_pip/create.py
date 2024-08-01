@@ -1,7 +1,8 @@
-from os import getcwd
+
 from pathlib import Path
 from typing import Literal
 
+getcwd = Path.cwd
 WORKFLOW_UBUNTU = """name: "Ubuntu"
 
 on:
@@ -121,6 +122,7 @@ def create_project(
     description="",
     deps: list[str] | Literal["local"] | None = None,
     python_version="3.11",
+    add_cli=True,
 ) -> None:
     # Create project root directory
     root = Path(getcwd())
@@ -128,27 +130,28 @@ def create_project(
     Path(project_root).mkdir(exist_ok=True)
     # Create main directories
     dirs = ["assets", "docs", "examples", "resources", "tests"]
-    for dir in dirs:
+    for dir in dirs: # noqa
         Path(root / dir).mkdir(exist_ok=True)
 
         # Create __about__.py in project directory
     Path(project_root / "__about__.py").touch(exist_ok=True)
     # Create __init__.py in project directory
-    add_cli = True
-    if not Path(project_root / "__init__.py").exists() and not Path(project_root / "main.py").exists():
+    if not Path(project_root / "__init__.py").exists() and not Path(project_root / "main.py").exists() and add_cli:
         Path(project_root / "__init__.py").write_text(
             "from .main import cli\n\n__all__ = ['cli']",
         )
         Path(project_root / "main.py").write_text(
             "from click import command\n\n@command()\ndef cli() -> None:\n    pass\n\nif __name__ == '__main__':\n    cli()",
         )
-        add_cli = False
+
     else:
         Path(project_root / "__init__.py").touch(exist_ok=True)
 
     if not Path(project_root / "__about__.py").exists():
         Path(project_root / "__about__.py").write_text('__version__ = "0.0.1"')
-
+    elif "__version__" not in Path(project_root / "__about__.py").read_text() and\
+      "y" in input("No __version__ found in __about__.py. Overwrite? (y/n): "):
+        Path(project_root / "__about__.py").write_text("__version__ = '0.0.1'")
         # Create files in root
     files = [
         ("LICENSE", ""),
@@ -161,6 +164,7 @@ def create_project(
             create_pyproject_toml(
                 project_name,
                 author,
+                description,
                 deps,
                 python_version=python_version,
                 add_cli=add_cli,
@@ -174,8 +178,8 @@ def create_project(
         ):
             print(f"{file} already exists. Skipping...")  # noqa
             continue
-        Path(project_root / file).touch(exist_ok=True)
-        Path(file).write_text(content)
+        Path(root / file).touch(exist_ok=True)
+        Path(root / file).write_text(content)
 
     Path("tests").mkdir(exist_ok=True)
 
@@ -197,15 +201,23 @@ def create_pyproject_toml(
     author,
     desc="",
     deps=None,
-    python_version="3.11",
+    python_version="3.10",
     add_cli=True,
 ) -> str:
     """Create a pyproject.toml file for a Hatch project."""
     authors = ",".join(["{" + f'name="{a}"' + "}" for a in author.split(",")])
     test_docs = "{tests,docs}"
     deps = ",\n     ".join([f'"{dep}"' for dep in deps]) if deps else ""
+    python_version = str(python_version)
     version_str = f"py{python_version.replace('.', '')}"
     cli_str = f"{project_name} ={project_name}:cli" if add_cli else ""
+
+    python_version_str = ">=" + python_version.lstrip("><=")
+    if len(python_version_str.split(".")) < 2:
+      raise ValueError("Invalid Python version")
+    programming_language = [f"Programming Language :: Python ::3.{str(v)}" for v in range(int(python_version_str.split(".")[1]), 13)]
+    programming_language =  "\n".join(f"\"{programming_language}\"," for programming_language in programming_language)
+
     return f"""[build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -215,14 +227,14 @@ name = "{project_name}"
 dynamic = ["version"]
 description = "{desc}"
 readme = "README.md"
-requires-python = ">={python_version}"
+requires-python = "{python_version_str}"
 license = "apache-2.0"
 keywords = []
 authors = [{authors}]
 classifiers = [
 "Development Status :: 4 - Beta",
 "Programming Language :: Python",
-"Programming Language :: Python :: {python_version}",
+{programming_language}
 "Programming Language :: Python :: Implementation :: CPython",
 "Programming Language :: Python :: Implementation :: PyPy",
 ]
@@ -334,9 +346,3 @@ convention = "google"
 """
 
 
-if __name__ == "__main__":
-    project_name = input("Enter project name: ")
-    author = input("Enter author name: ")
-    description = input("Enter project description: ")
-    deps = input("Enter dependencies separated by commas: ").split(",")
-    create_project(project_name, author, description, deps, add_cli=True)

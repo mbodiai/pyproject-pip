@@ -1,9 +1,14 @@
 import subprocess
 import sys
+import time
+import traceback
 from pathlib import Path
 
 import click
 import tomlkit
+from mdstream import MarkdownStream
+from rich import print
+from rich.traceback import Traceback
 
 from pyproject_pip.create import create_project
 from pyproject_pip.pypip import (
@@ -15,7 +20,7 @@ from pyproject_pip.pypip import (
     name_and_version,
 )
 
-from mdstream import MarkdownStream
+
 @click.group(invoke_without_command=True)
 @click.pass_context
 @click.option(
@@ -142,7 +147,7 @@ def uninstall_command(packages, hatch_env, dependency_group) -> None:
                 f"Unexpected error occurred while trying to uninstall {package_name}:",
                 err=True,
             )
-            click.echo(f"{e}", err=True)
+            print(Traceback.from_exception(e))
             sys.exit(1)
 
 
@@ -155,7 +160,7 @@ def show_command(hatch_env) -> None:
         hatch_env (str, optional): The Hatch environment to use. Defaults to "default".
     """
     try:
-        with open("pyproject.toml") as f:
+        with Path("pyproject.toml").open() as f:
             content = f.read()
             pyproject = tomlkit.parse(content)
 
@@ -172,7 +177,7 @@ def show_command(hatch_env) -> None:
             for dep in dependencies:
                 click.echo(f"  {dep}")
     except FileNotFoundError:
-        click.echo("pyproject.toml file not found.")
+        print(Traceback.from_exception(FileNotFoundError))
         sys.exit(1)
     finally:
         sys.exit(0)
@@ -187,6 +192,7 @@ def find_command(package, limit, sort) -> None:
 
     Args:
         package (str): The package to search for.
+        limit (int, optional): Limit the number of results. Defaults to 5.
         sort (str, optional): Sort key to use. Defaults to "downloads".
     """
     try:
@@ -198,38 +204,63 @@ def find_command(package, limit, sort) -> None:
             md.update(f"**Version:** {p['version']}")
             md.update(f"**Downloads:** {p['downloads']}")
             md.update(f"**Summary:** {p['summary']}")
-            md.update(f"**URL:** {p['url']}")
-            md.update("---")
+            md.update(f"**URLs:** {p.get('urls', '')}")
+            md.update("---", final=True)
+        time.sleep(2)
     except Exception as e:
-        click.echo(f"Error: {e}", err=True)
-        sys.exit(1)
+        traceback.print_exc()
 
+@cli.command("search") # Alias for find
+@click.argument("package")
+@click.option("--limit", default=5, help="Limit the number of results")
+@click.option("--sort", default="downloads", help="Sort key to use")
+def search_command(package, limit, sort) -> None:
+    """Find a package on PyPI and optionally sort the results.
+
+    Args:
+        package (str): The package to search for.
+        limit (int, optional): Limit the number of results. Defaults to 5.
+        sort (str, optional): Sort key to use. Defaults to "downloads".
+    """  # noqa: D205
+    try:
+        packages = find_and_sort(package, limit, sort)
+        md = MarkdownStream()
+        md.update("# Packages found:")
+        for p in packages:
+            md.update(f"## {p['name']}")
+            md.update(f"**Version:** {p['version']}")
+            md.update(f"**Downloads:** {p['downloads']}")
+            md.update(f"**Summary:** {p['summary']}")
+            md.update(f"**URLs:** {p.get('urls', '')}")
+            md.update("---", final=True)
+            time.sleep(2)
+    except Exception as e:
+        traceback.print_exc()
 
 @cli.command("info")
 @click.argument("package")
-@click.option("--verbose", "-v", is_flag=True, help="Show verbose output")
-def info_command(package, verbose) -> None:
+@click.option("--detailed", "-d", is_flag=True, help="Show verbose output")
+def info_command(package, detailed) -> None:
     """Get information about a package from PyPI.
 
     Args:
         package (str): The package to get information about.
+        detailed (bool, optional): Show detailed output. Defaults to False.
     """
     try:
-        package_info = get_package_info(package, verbose)
+        package_info = get_package_info(package, detailed)
         md = MarkdownStream()
         md.update(f"# {package_info['name']}")
         md.update(f"**Version:** {package_info['version']}")
         md.update(f"**Downloads:** {package_info['downloads']}")
-        md.update(f"**URL:** {package_info['url']}")
+        md.update(f"**URLs:** {package_info.get('urls', '')}")
         md.update(f"**Summary:** {package_info['summary']}")
-        md.update("---")
-        if verbose:
+        md.update("---", final=True)
+        if detailed:
             md.update(f"**Description:** {package_info['description']}")
-            
-
-
+        time.sleep(1)
     except Exception as e:
-        click.echo(f"Error: {e}", err=True)
+        traceback.print_exc()
         sys.exit(1)
 
 
@@ -238,9 +269,9 @@ def info_command(package, verbose) -> None:
 @click.argument("author")
 @click.option("--description", default="", help="Project description")
 @click.option("--deps", default=None, help="Dependencies separated by commas")
-@click.option("--python-version", default="3.11", help="Python version to use")
+@click.option("--python-version", default="3.10", help="Python version to use")
 @click.option("--no-cli", is_flag=True, help="Do not add a CLI")
-def create_command(project_name, author, description, deps, python_version="3.11", add_cli=True) -> None:
+def create_command(project_name, author, description, deps, python_version="3.10", no_cli=False) -> None:
     """Create a new Python project.
 
     Args:
@@ -248,14 +279,16 @@ def create_command(project_name, author, description, deps, python_version="3.11
         author (str): The author of the project.
         description (str, optional): The description of the project. Defaults to "".
         deps (str, optional): Dependencies separated by commas. Defaults to None.
+        python_version (str, optional): Python version to use. Defaults to "3.10".
+        add_cli (bool, optional): Whether to add a CLI. Defaults to True.
     """
     try:
         if deps:
             deps = deps.split(",")
-        create_project(project_name, author, description, deps, python_version, add_cli)
+        create_project(project_name, author, description, deps, python_version, not no_cli)
         click.echo(f"Project {project_name} created successfully.")
     except Exception as e:
-        click.echo(f"Error: {e}", err=True)
+        traceback.print_exc()
         sys.exit(1)
 
 

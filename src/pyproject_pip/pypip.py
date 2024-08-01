@@ -1,16 +1,21 @@
 """Synchronizes requirements and hatch pyproject."""
 
+import logging
 import re
 import subprocess
 import sys
+import traceback
 from pathlib import Path
 
 import markdown2
 import requests
 import tomlkit
+from rich.logging import RichHandler
 
 from pyproject_pip.create import create_project
 
+logger = logging.getLogger(__name__)
+logger.addHandler(RichHandler())
 
 def clean_text(md_text):
     """Convert Markdown to clean plain text."""
@@ -86,14 +91,14 @@ def search_package(package_name):
     """
     package_info = {}
     try:
-        response = requests.get(f"https://pypi.org/pypi/{package_name}/json")
+        response = requests.get(f"https://pypi.org/pypi/{package_name}/json", timeout=5)
         response.raise_for_status()  # Raises stored HTTPError, if one occurred.
         data = response.json()
         info = data.get("info", {})
 
         package_info["description"] = info.get("summary", "")
         package_info["details"] = info.get("description", "")
-
+        logging.debug("Package : %s", package_info)
         # Get GitHub URL if available
         project_urls = info.get("project_urls", {})
         package_info["github_url"] = next(
@@ -103,7 +108,7 @@ def search_package(package_name):
     except requests.RequestException:
         pass
     except Exception:
-        pass
+        logging.exception("Error fetching package info: %s", traceback.format_exc())
 
     return package_info
 
@@ -111,7 +116,7 @@ def search_package(package_name):
 def get_package_names(query_key):
     """Fetch package names from PyPI search results."""
     search_url = f"https://pypi.org/search/?q={query_key}"
-    response = requests.get(search_url)
+    response = requests.get(search_url, timeout=5)
     response.raise_for_status()
     page_content = response.text
 
@@ -142,7 +147,7 @@ def get_package_names(query_key):
 def get_package_info(package_name, verbose=False):
     """Retrieve detailed package information from PyPI JSON API."""
     package_url = f"https://pypi.org/pypi/{package_name}/json"
-    response = requests.get(package_url)
+    response = requests.get(package_url, timeout=5)
     response.raise_for_status()
     package_data = response.json()
 
@@ -155,6 +160,7 @@ def get_package_info(package_name, verbose=False):
         "version": info.get("version", ""),
         "summary": info.get("summary", ""),
         "downloads": downloads,
+        "urls": info.get("project_urls", {}),
     }
     if verbose:
         package_info["description"] = clean_text(info.get("description", ""))
@@ -494,7 +500,7 @@ def is_package_in_requirements(
     """
     if not Path(requirements_path).exists():
         raise FileNotFoundError("requirements.txt file not found.")
-    with open(requirements_path) as f:
+    with Path(requirements_path).open() as f:
         return any(base_name(package_name) == base_name(line) for line in f)
 
 
@@ -504,7 +510,7 @@ def get_requirements_packages(requirements="requirements.txt", as_set=True):
     Returns:
         set: Set of packages listed in the requirements.txt file.
     """
-    with open(requirements) as f:
+    with Path(requirements).open() as f:
         lines = [line.strip() for line in f if line.strip() and not line.strip().startswith("#")]
     return set(lines) if as_set else lines
 
@@ -525,7 +531,7 @@ def is_package_in_pyproject(
     """
     if not Path(pyproject_path).exists():
         raise FileNotFoundError("pyproject.toml file not found.")
-    with open(pyproject_path) as f:
+    with Path(pyproject_path).open() as f:
         content = f.read()
         pyproject = tomlkit.parse(content)
     is_hatch_env = hatch_env and "tool" in pyproject and "hatch" in pyproject["tool"]

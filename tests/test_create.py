@@ -39,7 +39,7 @@ def test_create_project(mock_cwd):
                     f"# {project_name}\n\n{description}\n\n## Installation\n\n```bash\npip install {project_name}\n```\n"
                 ),  # README.md
                 call("mock_pyproject_content"),  # pyproject.toml
-                call('__version__ = "0.1.0"'),  # __about__.py
+                call('__version__ = "0.0.1"'),  # __about__.py
             ],
             any_order=True,
         )
@@ -48,7 +48,7 @@ def test_create_project(mock_cwd):
         assert mock_touch.call_count == 7
 
         # Check if create_pyproject_toml was called with correct arguments
-        mock_create_pyproject.assert_called_once_with(project_name, author, deps)
+        mock_create_pyproject.assert_called_once_with(project_name, author, description, deps, python_version="3.11", add_cli=True)
 
 
 def test_create_project_with_local_deps(mock_cwd):
@@ -62,10 +62,11 @@ def test_create_project_with_local_deps(mock_cwd):
             "local_project",
             "Local Author",
             "local",
+            None,
             python_version="3.11",
             add_cli=False,
         )
-        mock_create_pyproject.assert_called_once_with("local_project", "Local Author", "local")
+        mock_create_pyproject.assert_called_once_with("local_project", "Local Author", "local", None, python_version='3.11', add_cli=False)
 
 
 def test_create_project_no_deps(mock_cwd):
@@ -79,9 +80,10 @@ def test_create_project_no_deps(mock_cwd):
         mock_create_pyproject.assert_called_once_with(
             "no_deps_project",
             "No Deps Author",
+            "",
             None,
             python_version="3.11",
-            add_cli=False,
+            add_cli=True,
         )
 
 

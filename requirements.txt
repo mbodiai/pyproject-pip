@@ -4,3 +4,5 @@ requests
 toml
 tomlkit
 markdown2
+rich
+mdstream

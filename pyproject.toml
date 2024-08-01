@@ -11,27 +11,29 @@ requires-python = ">=3.8"
 license = "apache-2.0"
 keywords = []
 authors = [
-  { name = "Sebastian Peralta", email = "sebastian@mbodi.ai" },
+{ name = "Sebastian Peralta", email = "sebastian@mbodi.ai" },
 ]
 classifiers = [
-  "Development Status :: 4 - Beta",
-  "Programming Language :: Python",
-  "Programming Language :: Python :: 3.8",
-  "Programming Language :: Python :: 3.9",
-  "Programming Language :: Python :: 3.10",
-  "Programming Language :: Python :: 3.11",
-  "Programming Language :: Python :: 3.12",
-  "Programming Language :: Python :: Implementation :: CPython",
-  "Programming Language :: Python :: Implementation :: PyPy",
+"Development Status :: 4 - Beta",
+"Programming Language :: Python",
+"Programming Language :: Python :: 3.8",
+"Programming Language :: Python :: 3.9",
+"Programming Language :: Python :: 3.10",
+"Programming Language :: Python :: 3.11",
+"Programming Language :: Python :: 3.12",
+"Programming Language :: Python :: Implementation :: CPython",
+"Programming Language :: Python :: Implementation :: PyPy",
 ]
 dependencies = [
-  "click",
-  "markdown2",
-  "packaging",
-  "requests",
-  "toml",
-  "tomlkit"
-  ]
+"click",
+"markdown2",
+"mdstream >= 0.2.4",
+"packaging",
+"requests",
+"rich",
+"toml",
+"tomlkit"
+]
 [project.scripts]
 pypip = "pyproject_pip.cli:cli"
 
@@ -41,18 +43,20 @@ Issues = "https://github.com/mbodiai/pyproject-pip/issues"
 Source = "https://github.com/mbodiai/pyproject-pip"
 
 
+
+
 [tool.hatch.version]
 path = "src/pyproject_pip/__about__.py"
 [tool.hatch.envs.default]
-python = "3.11"
+python = "3.10"
 path = ".pypip/envs/pypip"
 dependencies = [
-  "pyclean==3.0.0",
-  "pytest",
+"pyclean==3.0.0",
+"pytest",
 ]
 [tool.hatch.envs.types]
 extra-dependencies = [
-  "mypy>=1.0.0",
+"mypy>=1.0.0",
 ]
 [tool.hatch.envs.types.scripts]
 check = "mypy --install-types --non-interactive {args:src/pyproject_pip tests}"
@@ -62,7 +66,7 @@ source_pkgs = ["pyproject_pip", "tests"]
 branch = true
 parallel = true
 omit = [
-  "src/pyproject_pip/__about__.py",
+"src/pyproject_pip/__about__.py",
 ]
 
 [tool.coverage.paths]
@@ -72,9 +76,9 @@ tests = ["tests", "*/pyproject-pip/tests"]
 
 [tool.coverage.report]
 exclude_lines = [
-  "no cov",
-  "if __name__ == .__main__.:",
-  "if TYPE_CHECKING:",
+"no cov",
+"if __name__ == .__main__.:",
+"if TYPE_CHECKING:",
 ]
 [tool.ruff]
 line-length = 120
